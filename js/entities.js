@@ -88,17 +88,78 @@ function makeHumanoid(o) {
   if (o.hair !== null) { m = addMesh(g, new THREE.SphereGeometry(0.14, 10, 8), lam(o.hair || 0x3a2818), 0, 1.84, -0.03, false); m.scale.set(1, 0.9, 1); }
   if (o.scarf) addMesh(g, cyl(0.1, 0.12, 0.1), lam(o.scarf), 0, 1.66, 0.01, false);
   if (o.mask) addMesh(g, new THREE.BoxGeometry(0.25, 0.11, 0.26), lam(o.mask), 0, 1.74, 0.01, false);
+  if (o.beard) { m = addMesh(g, new THREE.SphereGeometry(0.12, 10, 8), lam(o.hair || 0x2a1a10), 0, 1.7, 0.05, false); m.scale.set(1, 0.8, 0.8); }
+  if (o.poncho) { m = addMesh(g, new THREE.ConeGeometry(0.52, 0.62, 12, 1, true), lam(o.poncho, { side: THREE.DoubleSide }), 0, 1.33, 0); m.scale.z = 0.8; addMesh(g, cyl(0.3, 0.3, 0.05, 12), lam(o.poncho2 || 0xe8d8b0), 0, 1.06, 0, false).scale.z = 0.8; }
+  if (o.bandolier) { m = addMesh(g, new THREE.BoxGeometry(0.07, 0.72, 0.04), lam(0x3a2414), 0.02, 1.3, 0.2, false); m.rotation.z = 0.7; }
   if (o.hat !== undefined && o.hat !== null) {
-    const brim = addMesh(g, cyl(0.36, 0.34, 0.03, 14), lam(o.hat), 0, 1.93, 0); brim.rotation.z = 0.05;
-    addMesh(g, cyl(0.16, 0.2, 0.22, 12), lam(o.hat), 0, 2.03, 0);
-    addMesh(g, cyl(0.203, 0.207, 0.04, 12), lam(o.band || 0x2a1a10), 0, 1.96, 0, false);
+    const hs = o.hatStyle || 'cowboy', hm = lam(o.hat);
+    if (hs === 'bowler') {
+      addMesh(g, cyl(0.24, 0.24, 0.025, 14), hm, 0, 1.94, 0);
+      m = addMesh(g, new THREE.SphereGeometry(0.17, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), hm, 0, 1.95, 0); m.scale.y = 1.2;
+      addMesh(g, cyl(0.172, 0.172, 0.035, 12), lam(o.band || 0x1a1a1a), 0, 1.97, 0, false);
+    } else if (hs === 'sombrero') {
+      addMesh(g, cyl(0.62, 0.6, 0.03, 18), hm, 0, 1.93, 0);
+      addMesh(g, new THREE.ConeGeometry(0.2, 0.36, 12), hm, 0, 2.12, 0);
+      addMesh(g, cyl(0.19, 0.2, 0.05, 12), lam(o.band || 0xa02020), 0, 1.97, 0, false);
+    } else if (hs === 'flat') {
+      addMesh(g, cyl(0.34, 0.34, 0.025, 14), hm, 0, 1.93, 0);
+      addMesh(g, cyl(0.18, 0.18, 0.13, 12), hm, 0, 2.0, 0);
+      addMesh(g, cyl(0.183, 0.183, 0.035, 12), lam(o.band || 0x2a1a10), 0, 1.955, 0, false);
+    } else if (hs === 'fur') {
+      m = addMesh(g, cyl(0.17, 0.18, 0.2, 10), hm, 0, 1.98, 0);
+      m = addMesh(g, new THREE.CylinderGeometry(0.035, 0.02, 0.4, 6), hm, 0, 1.9, -0.25, false); m.rotation.x = 0.9;
+    } else {
+      const brim = addMesh(g, cyl(0.36, 0.34, 0.03, 14), hm, 0, 1.93, 0); brim.rotation.z = 0.05;
+      addMesh(g, cyl(0.16, 0.2, 0.22, 12), hm, 0, 2.03, 0);
+      addMesh(g, cyl(0.203, 0.207, 0.04, 12), lam(o.band || 0x2a1a10), 0, 1.96, 0, false);
+    }
   }
-  const gun = addMesh(arms[1], new THREE.BoxGeometry(0.06, 0.16, 0.3), lam(0x2a2a2e), 0, -0.62, 0.1, false);
-  const rifle = addMesh(arms[1], new THREE.BoxGeometry(0.07, 0.1, 1.0), lam(0x5a3a22), 0, -0.55, 0.4, false);
-  rifle.visible = false;
-  return { g, legs, arms, gun, rifle };
+  const hand = new THREE.Group(); hand.position.set(0, -0.6, 0.02); hand.rotation.x = Math.PI / 2; arms[1].add(hand);
+  return { g, legs, arms, hand, held: undefined };
 }
-function setLongGun(m, len, color) { m.rifle.scale.z = len; m.rifle.position.z = 0.15 + 0.25 * len; m.rifle.material = lam(color || 0x5a3a22); }
+
+// ---------- Waffenmodelle (Lauf zeigt in +z, Griff am Ursprung) ----------
+const _wpnCache = {};
+function makeWeaponModel(key) {
+  const w = WEAPONS[key], s = w.model || {}, g = new THREE.Group();
+  const metal = lam(s.metal || 0x2a2a2e), wood = lam(s.wood || 0x5a3a22);
+  const zc = (r1, r2, len, seg = 7) => { const c = new THREE.CylinderGeometry(r1, r2, len, seg); c.rotateX(Math.PI / 2); return c; };
+  if (s.kind === 'bow') {
+    const inner = new THREE.Group(); inner.rotation.y = -Math.PI / 2; inner.position.z = -0.42; g.add(inner);
+    const arc = addMesh(inner, new THREE.TorusGeometry(0.45, 0.016, 4, 14, Math.PI * 0.9), wood, 0, 0, 0, false); arc.rotation.z = -Math.PI * 0.45;
+    addMesh(g, new THREE.BoxGeometry(0.004, 0.88, 0.004), lam(0xe8e0c8), 0, 0, -0.35, false);
+    addMesh(g, new THREE.BoxGeometry(0.035, 0.1, 0.04), lam(0x3a2414), 0, 0, 0, false);
+  } else if (s.kind === 'pistol') {
+    const len = s.len || 0.16;
+    addMesh(g, new THREE.BoxGeometry(0.04, 0.12, 0.06), wood, 0, -0.06, -0.02, false).rotation.x = 0.3;
+    addMesh(g, new THREE.BoxGeometry(0.045, 0.06, 0.12), metal, 0, 0.02, 0.03, false);
+    if (s.drum) addMesh(g, zc(0.036, 0.036, 0.07, 8), metal, 0, 0.035, 0.06, false);
+    if (s.box) addMesh(g, new THREE.BoxGeometry(0.05, 0.1, 0.07), metal, 0, -0.02, 0.1, false);
+    const n = s.double ? 2 : 1;
+    for (let i = 0; i < n; i++) addMesh(g, zc(s.bore || 0.014, s.bore || 0.014, len), metal, n > 1 ? (i ? 0.02 : -0.02) : 0, 0.045, 0.09 + len / 2, false);
+    if (s.under) addMesh(g, zc(0.01, 0.01, len * 0.8), metal, 0, 0.018, 0.09 + len * 0.4, false);
+  } else {
+    const len = s.len || 0.7;
+    addMesh(g, new THREE.BoxGeometry(0.05, 0.1, s.stock || 0.34), wood, 0, -0.04, -(s.stock || 0.34) / 2 - 0.02, false);
+    addMesh(g, new THREE.BoxGeometry(0.055, 0.075, 0.18), metal, 0, 0.02, 0.04, false);
+    const n = s.double ? 2 : 1;
+    for (let i = 0; i < n; i++) addMesh(g, zc(s.bore || 0.017, s.bore || 0.017, len), metal, n > 1 ? (i ? 0.022 : -0.022) : 0, 0.045, 0.12 + len / 2, false);
+    addMesh(g, new THREE.BoxGeometry(0.05, 0.045, len * 0.45), wood, 0, 0.01, 0.14 + len * 0.22, false);
+    if (s.pump) addMesh(g, zc(0.028, 0.028, 0.16), wood, 0, 0.012, 0.12 + len * 0.55, false);
+    if (s.tube) addMesh(g, zc(0.011, 0.011, len * 0.85), metal, 0, 0.018, 0.12 + len * 0.43, false);
+    if (s.scope) addMesh(g, zc(0.024, 0.024, 0.34, 8), lam(0x111114), 0, 0.105, 0.1, false);
+    if (s.lever) { const l = addMesh(g, new THREE.TorusGeometry(0.045, 0.008, 4, 8), metal, 0, -0.05, 0.05, false); l.rotation.y = Math.PI / 2; }
+  }
+  return g;
+}
+function setHeldWeapon(m, key) {
+  if (m.held === key) return;
+  m.held = key;
+  while (m.hand.children.length) m.hand.remove(m.hand.children[0]);
+  if (!key || !WEAPONS[key]) return;
+  const proto = _wpnCache[key] || (_wpnCache[key] = makeWeaponModel(key));
+  m.hand.add(proto.clone());
+}
 
 // ---------- Vierbeiner (Pferd, Hirsch, Kuh, Wolf) ----------
 function makeQuad(o) {
@@ -216,20 +277,26 @@ const KINDS = {
   sheriff: { hp: 130, speed: 5, acc: 0.55, dmg: [8, 12], rate: [0.9, 1.4], range: 65, near: 12, far: 30, bounty: [0, 0] },
 };
 const VARIANTS = {
-  gun: {},
-  shotgun: { hp: 85, dmg: [16, 24], rate: [1.5, 2.2], acc: 0.7, accFall: 38, near: 3, far: 13, range: 32, speed: 5.8, long: 1.0, pellets: 5, look: { coat: 0x4a3a2a, hat: 0x3a2a1a } },
-  rifle: { hp: 60, dmg: [15, 21], rate: [2.0, 2.8], acc: 0.66, accFall: 260, near: 34, far: 70, range: 125, speed: 3.8, long: 1.5, look: { hat: 0x6a5a3a, band: 0xa02020 } },
-  dynamiter: { hp: 65, dmg: [5, 8], rate: [2.0, 3.0], near: 14, far: 34, range: 50, dynamite: true, look: { vest: 0x7a2a1a, scarf: 0x222222 } },
-  duelist: { hp: 70, dmg: [24, 32], rate: [0.6, 0.9], acc: 0.72, accFall: 500, near: 0, far: 999, range: 60, noMove: true, look: { shirt: 0xe8e0d0, pants: 0x1a1a1a, hat: 0x111111, scarf: 0xa01818, vest: 0x1a1a1a, stache: true } },
+  gun: { weapon: 'rev' },
+  shotgun: { weapon: 'shotgun', hp: 85, dmg: [16, 24], rate: [1.5, 2.2], acc: 0.7, accFall: 38, near: 3, far: 13, range: 32, speed: 5.8, long: 1.0, pellets: 5, look: { coat: 0x4a3a2a, hat: 0x3a2a1a } },
+  rifle: { weapon: 'rifle', hp: 60, dmg: [15, 21], rate: [2.0, 2.8], acc: 0.66, accFall: 260, near: 34, far: 70, range: 125, speed: 3.8, long: 1.5, look: { hat: 0x6a5a3a, band: 0xa02020 } },
+  carbine: { weapon: 'carbine', hp: 65, dmg: [9, 13], rate: [0.7, 1.1], acc: 0.5, accFall: 200, near: 16, far: 40, range: 85, speed: 4.4, long: 1.0, look: { hatStyle: 'flat', hat: 0x3a3226, bandolier: true } },
+  sawedoff: { weapon: 'sawedoff', hp: 75, dmg: [18, 26], rate: [1.6, 2.4], acc: 0.72, accFall: 28, near: 2, far: 9, range: 22, speed: 6.2, pellets: 5, look: { hatStyle: 'bowler', hat: 0x1a1a1a, vest: 0x5a1a1a } },
+  dynamiter: { weapon: 'rev', hp: 65, dmg: [5, 8], rate: [2.0, 3.0], near: 14, far: 34, range: 50, dynamite: true, look: { vest: 0x7a2a1a, scarf: 0x222222 } },
+  duelist: { weapon: 'schof', hp: 70, dmg: [24, 32], rate: [0.6, 0.9], acc: 0.72, accFall: 500, near: 0, far: 999, range: 60, noMove: true, look: { shirt: 0xe8e0d0, pants: 0x1a1a1a, hat: 0x111111, scarf: 0xa01818, vest: 0x1a1a1a, stache: true } },
 };
 const OUTLAW_LOOKS = [
   { shirt: 0x5a3a2a, pants: 0x2f2a26, hat: 0x2a1c14, scarf: 0x8a1a1a, stache: true }, { shirt: 0x3a3f4a, pants: 0x3a3226, hat: 0x4a3a2a, mask: 0x777777 },
   { shirt: 0x6a5a3a, pants: 0x2a2a2a, hat: 0x1a1a1a, vest: 0x3a2a1a, stache: true }, { shirt: 0x7a2a22, pants: 0x3a3a3a, hat: 0x5a4a30, scarf: 0x222222 },
+  { shirt: 0xc8b890, pants: 0x4a3a2a, hat: 0x9a8058, hatStyle: 'sombrero', poncho: 0x8a3a1a, poncho2: 0xd8c080, beard: true }, { shirt: 0x4a4a3a, pants: 0x2a2a22, hat: 0x5a4028, hatStyle: 'fur', beard: true, coat: 0x6a4a2a },
+  { shirt: 0x2a2a2a, pants: 0x1a1a1a, hat: 0x222222, hatStyle: 'flat', mask: 0x3a1a1a, bandolier: true },
 ];
 const CIV_LOOKS = [
   { shirt: 0xd8d0c0, pants: 0x4a4a52, hat: 0x8a7a5a, stache: true }, { shirt: 0x4a6a8a, pants: 0x3a3226, hat: 0x3a2a1a, vest: 0x5a4a3a },
   { shirt: 0xa84a4a, pants: 0x2a2a3a, hat: null, hair: 0x7a5a2a }, { shirt: 0x6a8a5a, pants: 0x5a4a3a, hat: 0xc9b48a },
   { shirt: 0xc8a0a0, pants: 0x6a4a5a, hat: 0xd8c8a8, hair: 0x5a3a20, coat: 0x8a5a6a },
+  { shirt: 0xf0ece0, pants: 0x2a2a2a, hat: 0x2a2a2a, hatStyle: 'bowler', vest: 0x6a1a2a, stache: true }, { shirt: 0xe0d8c0, pants: 0x3a3a3a, hat: 0x3a3a3a, hatStyle: 'flat', coat: 0x2a2a3a, beard: true },
+  { shirt: 0xd8c8a0, pants: 0x5a4a3a, hat: 0xb8a070, hatStyle: 'sombrero', poncho: 0x3a6a5a, poncho2: 0xe8d8b0 },
 ];
 const SKINS = [0xd9a877, 0xc48a5e, 0xe8c09a, 0x8a5a3a, 0xb07a52];
 const TALK = ['Schöner Tag, Fremder.', 'Halt dich von den Coyote-Hollow-Banditen fern!', 'Der Sheriff sucht Hilfe, sagt man.', 'Im Saloon gibt es den besten Whiskey westlich vom Fluss.', 'Ohne Pferd kommt man hier nicht weit.', 'Nachts heulen die Kojoten. Und Schlimmeres.', 'Black Jack Morgan soll ein Fort im Südwesten haben.', 'Bitte keinen Ärger, Mister.', 'Am Ostende der Stadt wartet ein Revolverheld auf Herausforderer.', 'Der Waffenhändler hat neue Ware. Schrotflinten, Scharfschützengewehre…', 'Wölfe reißen bei Nacht sogar Rinder. Bleib auf der Straße.', 'Sonne, Staub und Ärger. Das ist Copper Creek.'];
@@ -257,7 +324,7 @@ class Human {
     this.g = this.m.g;
     const sc = kind === 'boss' ? 1.12 : kind === 'civilian' ? rand(0.94, 1.04) : rand(0.97, 1.05);
     this.g.scale.setScalar(sc);
-    if (this.cfg.long) { this.m.gun.visible = false; this.m.rifle.visible = true; setLongGun(this.m, this.cfg.long, this.variant === 'shotgun' ? 0x4a3a2a : 0x5a3a22); }
+    if (kind !== 'civilian') setHeldWeapon(this.m, this.cfg.weapon || 'rev');
     scene.add(this.g); humans.push(this);
     this.syncModel();
   }
@@ -279,7 +346,7 @@ class Human {
   }
   die(head) {
     this.dead = true; this.state = 'dead'; this.deadT = 0; this.hp = 0;
-    this.m.rifle.visible = false;
+    setHeldWeapon(this.m, null);
     onKill(this, head);
   }
   moveToward(tx, tz, sp, dt, face = true) {
@@ -516,15 +583,15 @@ function makeExplosiveBarrel(x, z) {
   const c = addCircle(x, z, 0.5);
   explosives.push({ x, y, z, g, c, dead: false });
 }
-function spawnBomb(from, vel, fuse, fromPlayer) {
+function spawnBomb(from, vel, fuse, fromPlayer, harmless) {
   const g = new THREE.Group();
   addMesh(g, new THREE.CylinderGeometry(0.05, 0.05, 0.3, 6), lam(0xc02818), 0, 0, 0, false).rotation.z = Math.PI / 2;
   const spark = addMesh(g, new THREE.SphereGeometry(0.05, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffa030 }), 0.17, 0.04, 0, false);
   g.position.copy(from); scene.add(g);
-  bombs.push({ g, spark, v: vel.clone(), t: fuse, fromPlayer, sparkT: 0 });
+  bombs.push({ g, spark, v: vel.clone(), t: fuse, fromPlayer, harmless, sparkT: 0 });
 }
 function queueExplosion(x, y, z, r, dmg, fromPlayer, delay) { pendingBooms.push({ x, y, z, r, dmg, fromPlayer, t: delay }); }
-function explode(x, y, z, r, dmg, fromPlayer) {
+function explode(x, y, z, r, dmg, fromPlayer, harmless) {
   const pos = new V3(x, y, z);
   explosionFX(pos, r);
   const dP = Math.hypot(player.x - x, player.y + 1 - y, player.z - z);
@@ -541,7 +608,7 @@ function explode(x, y, z, r, dmg, fromPlayer) {
     }
   }
   for (const a of animals) if (!a.dead && Math.hypot(a.x - x, a.z - z) < r) a.hurt(dmg * (1 - Math.hypot(a.x - x, a.z - z) / r));
-  if (player.alive && dP < r) damagePlayer(dmg * (1 - dP / r) * 0.75, x, z);
+  if (player.alive && dP < r && !harmless) damagePlayer(dmg * (1 - dP / r) * 0.75, x, z);
   for (const e of explosives) if (!e.dead && Math.hypot(e.x - x, e.z - z) < r * 0.9) { e.dead = true; queueExplosion(e.x, e.y + 0.5, e.z, 7, 120, fromPlayer, 0.18); scene.remove(e.g); e.c.x = 1e6; }
   for (const b of bombs) if (b.t > 0.2 && b.g.position.distanceTo(pos) < r * 0.8) b.t = 0.12;
   alarm(x, z, 130);
@@ -563,7 +630,7 @@ function updateBombs(dt) {
       b.g.rotation.x += dt * 8; b.g.rotation.z += dt * 5;
     }
     if (b.sparkT > 0.06) { b.sparkT = 0; spawnPuff(p, 0xffa030, 1, 0.3, 0.6, 0, 0.5, 0.25); }
-    if (b.t <= 0) { scene.remove(b.g); bombs.splice(i, 1); explode(p.x, p.y, p.z, 9, 150, b.fromPlayer); }
+    if (b.t <= 0) { scene.remove(b.g); bombs.splice(i, 1); explode(p.x, p.y, p.z, 9, 150, b.fromPlayer, b.harmless); }
   }
   for (let i = pendingBooms.length - 1; i >= 0; i--) {
     const e = pendingBooms[i]; e.t -= dt;
@@ -574,9 +641,9 @@ function updateBombs(dt) {
 // ---------- Bevölkerung ----------
 let playerHorse;
 const CAMP_VARIANTS = [
-  ['gun', 'gun', 'gun', 'gun', 'shotgun'],
-  ['gun', 'gun', 'gun', 'shotgun', 'rifle', 'dynamiter'],
-  ['gun', 'gun', 'gun', 'shotgun', 'shotgun', 'rifle', 'rifle', 'dynamiter'],
+  ['gun', 'gun', 'carbine', 'gun', 'shotgun'],
+  ['gun', 'carbine', 'sawedoff', 'shotgun', 'rifle', 'dynamiter'],
+  ['gun', 'carbine', 'sawedoff', 'shotgun', 'shotgun', 'rifle', 'rifle', 'dynamiter'],
 ];
 const BOUNTY_TARGETS = [
   { name: 'Slim Hollis', reward: 120 }, { name: 'Mad Dog McCall', reward: 180 }, { name: 'Einäugiger Rufus', reward: 150 }, { name: 'Diego „El Gato“ Vargas', reward: 220 },
@@ -589,7 +656,7 @@ function populate() {
     }
     for (let k = 0; k < 3; k++) makeVulture(c.x, c.z);
     for (let k = 0; k < 3; k++) { const a = rand(0, 6.28), r = rand(5, 9); makeExplosiveBarrel(c.x + Math.cos(a) * r, c.z + Math.sin(a) * r); }
-    if (c.fort) { const b = new Human('boss', c.x, c.z - 3, { camp: i, name: 'Black Jack Morgan', variant: 'shotgun' }); b.home = { x: c.x, z: c.z - 3 }; b.cfg.near = 8; b.cfg.far = 24; }
+    if (c.fort) { const b = new Human('boss', c.x, c.z - 3, { camp: i, name: 'Black Jack Morgan', variant: 'shotgun' }); setHeldWeapon(b.m, 'pump'); b.home = { x: c.x, z: c.z - 3 }; b.cfg.near = 8; b.cfg.far = 24; }
   });
   // Hinterhalte an den Straßen, jeweils mit Kopfgeld-Anführer
   const amb = [[-80, -40], [160, -130], [-90, 190], [140, 110]];

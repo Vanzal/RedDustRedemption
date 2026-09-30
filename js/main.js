@@ -6,15 +6,32 @@ const game = { started: false, paused: false, menu: null, menuArg: null, noLock:
 
 // ---------- Waffen ----------
 const WEAPONS = {
-  rev: { name: 'Cattleman-Revolver', type: 'pistol', ammo: 'pistol', mag: 6, dmg: 36, head: 140, rate: 0.3, reload: 2.4, range: 130, spread: 0.04, spreadAim: 0.006, recoil: 0.05, pellets: 1, fov: 50, len: 0, price: 0, desc: 'Zuverlässig und schnell.' },
-  schof: { name: 'Schofield-Revolver', type: 'pistol', ammo: 'pistol', mag: 6, dmg: 58, head: 240, rate: 0.5, reload: 2.8, range: 140, spread: 0.035, spreadAim: 0.004, recoil: 0.08, pellets: 1, fov: 48, len: 0, price: 140, desc: 'Schwereres Kaliber, hoher Schaden.' },
-  mauser: { name: 'Mauser-Pistole', type: 'pistol', ammo: 'pistol', mag: 10, dmg: 24, head: 100, rate: 0.11, reload: 2.2, range: 100, spread: 0.06, spreadAim: 0.016, recoil: 0.03, pellets: 1, auto: true, fov: 52, len: 0, price: 260, desc: 'Halbautomatisch, Dauerfeuer bei gedrückter Taste.' },
-  rifle: { name: 'Repetiergewehr', type: 'long', ammo: 'rifle', mag: 6, dmg: 90, head: 320, rate: 0.8, reload: 2.9, range: 420, spread: 0.02, spreadAim: 0.0012, recoil: 0.09, pellets: 1, fov: 34, len: 1.0, heavy: true, price: 0, desc: 'Gute Reichweite und Durchschlagskraft.' },
-  shotgun: { name: 'Schrotflinte', type: 'long', ammo: 'shell', mag: 2, dmg: 20, head: 45, rate: 0.55, reload: 2.6, range: 45, spread: 0.1, spreadAim: 0.07, recoil: 0.14, pellets: 8, fov: 56, len: 0.9, heavy: true, price: 180, desc: 'Verheerend auf kurze Distanz.', color: 0x4a3a2a },
-  sniper: { name: 'Scharfschützengewehr', type: 'long', ammo: 'rifle', mag: 1, dmg: 240, head: 700, rate: 1.5, reload: 2.4, range: 700, spread: 0.03, spreadAim: 0.0002, recoil: 0.15, pellets: 1, fov: 12, len: 1.6, heavy: true, price: 380, desc: 'Ein Schuss, ein Treffer. Zielfernrohr mit rechter Maustaste.', color: 0x2f2f34 },
+  rev: { name: 'Cattleman-Revolver', type: 'pistol', ammo: 'pistol', mag: 6, dmg: 36, head: 140, rate: 0.3, reload: 2.4, range: 130, spread: 0.04, spreadAim: 0.006, recoil: 0.05, pellets: 1, fov: 50, price: 0, desc: 'Zuverlässig und schnell.', model: { kind: 'pistol', len: 0.16, drum: true, under: true } },
+  schof: { name: 'Schofield-Revolver', type: 'pistol', ammo: 'pistol', mag: 6, dmg: 58, head: 240, rate: 0.5, reload: 2.8, range: 140, spread: 0.035, spreadAim: 0.004, recoil: 0.08, pellets: 1, fov: 48, price: 140, desc: 'Schwereres Kaliber, hoher Schaden.', model: { kind: 'pistol', len: 0.2, drum: true, metal: 0x6a6a70 } },
+  navy: { name: 'Navy-Revolver', type: 'pistol', ammo: 'pistol', mag: 6, dmg: 30, head: 120, rate: 0.2, reload: 2.1, range: 120, spread: 0.045, spreadAim: 0.008, recoil: 0.04, pellets: 1, fov: 50, price: 90, desc: 'Leicht und sehr schnell zu feuern.', model: { kind: 'pistol', len: 0.22, drum: true, under: true, metal: 0x8a7a50 } },
+  lemat: { name: 'LeMat-Revolver', type: 'pistol', ammo: 'pistol', mag: 9, dmg: 40, head: 150, rate: 0.36, reload: 3.2, range: 125, spread: 0.04, spreadAim: 0.007, recoil: 0.07, pellets: 1, fov: 49, price: 320, desc: 'Neun Schuss in der Trommel.', model: { kind: 'pistol', len: 0.2, drum: true, under: true, bore: 0.017, metal: 0x3a3a3e } },
+  mauser: { name: 'Mauser-Pistole', type: 'pistol', ammo: 'pistol', mag: 10, dmg: 24, head: 100, rate: 0.11, reload: 2.2, range: 100, spread: 0.06, spreadAim: 0.016, recoil: 0.03, pellets: 1, auto: true, fov: 52, price: 260, desc: 'Halbautomatisch, Dauerfeuer bei gedrückter Taste.', model: { kind: 'pistol', len: 0.14, box: true, metal: 0x1a1a1e } },
+  sawedoff: { name: 'Abgesägte Schrotflinte', type: 'pistol', ammo: 'shell', mag: 2, dmg: 22, head: 44, rate: 0.35, reload: 2.2, range: 26, spread: 0.14, spreadAim: 0.1, recoil: 0.16, pellets: 9, fov: 56, heavy: true, price: 210, desc: 'Einhändig, brutal auf wenige Meter.', model: { kind: 'pistol', len: 0.26, double: true, bore: 0.02, metal: 0x2a2a2a } },
+  rifle: { name: 'Repetiergewehr', type: 'long', ammo: 'rifle', mag: 6, dmg: 90, head: 320, rate: 0.8, reload: 2.9, range: 420, spread: 0.02, spreadAim: 0.0012, recoil: 0.09, pellets: 1, fov: 34, heavy: true, price: 0, desc: 'Gute Reichweite und Durchschlagskraft.', model: { kind: 'long', len: 0.75 } },
+  carbine: { name: 'Unterhebel-Karabiner', type: 'long', ammo: 'rifle', mag: 12, dmg: 55, head: 200, rate: 0.42, reload: 3.4, range: 300, spread: 0.025, spreadAim: 0.002, recoil: 0.07, pellets: 1, fov: 38, heavy: true, price: 240, desc: 'Zwölf Schuss, schnelles Nachrepetieren.', model: { kind: 'long', len: 0.6, lever: true, tube: true, wood: 0x7a4a26, metal: 0x8a7040 } },
+  shotgun: { name: 'Schrotflinte', type: 'long', ammo: 'shell', mag: 2, dmg: 20, head: 45, rate: 0.55, reload: 2.6, range: 45, spread: 0.1, spreadAim: 0.07, recoil: 0.14, pellets: 8, fov: 56, heavy: true, price: 180, desc: 'Verheerend auf kurze Distanz.', model: { kind: 'long', len: 0.7, double: true, wood: 0x4a3a2a } },
+  pump: { name: 'Vorderschaft-Flinte', type: 'long', ammo: 'shell', mag: 5, dmg: 18, head: 40, rate: 0.75, reload: 3.6, range: 50, spread: 0.09, spreadAim: 0.06, recoil: 0.13, pellets: 7, fov: 55, heavy: true, price: 340, desc: 'Fünf Patronen, repetiert per Vorderschaft.', model: { kind: 'long', len: 0.72, pump: true, tube: true, bore: 0.02, wood: 0x3a2a1c } },
+  sniper: { name: 'Scharfschützengewehr', type: 'long', ammo: 'rifle', mag: 1, dmg: 240, head: 700, rate: 1.5, reload: 2.4, range: 700, spread: 0.03, spreadAim: 0.0002, recoil: 0.15, pellets: 1, fov: 12, heavy: true, price: 380, desc: 'Ein Schuss, ein Treffer. Zielfernrohr mit rechter Maustaste.', model: { kind: 'long', len: 1.0, scope: true, wood: 0x2f2f34 } },
+  bow: { name: 'Jagdbogen', type: 'long', ammo: 'arrow', mag: 1, dmg: 70, head: 260, rate: 0.9, reload: 0.8, range: 160, spread: 0.02, spreadAim: 0.002, recoil: 0.02, pellets: 1, fov: 40, silent: true, tracer: 0xd8c8a0, price: 120, desc: 'Lautlos – kein Alarm, ideal für die Jagd.', model: { kind: 'bow', wood: 0x6a4424 } },
 };
-const ORDER = ['rev', 'schof', 'mauser', 'rifle', 'shotgun', 'sniper'];
-const AMMO_NAMES = { pistol: 'Revolverkugeln', rifle: 'Gewehrpatronen', shell: 'Schrotpatronen' };
+const ORDER = ['rev', 'schof', 'navy', 'lemat', 'mauser', 'sawedoff', 'rifle', 'carbine', 'shotgun', 'pump', 'sniper', 'bow'];
+const AMMO_NAMES = { pistol: 'Revolverkugeln', rifle: 'Gewehrpatronen', shell: 'Schrotpatronen', arrow: 'Pfeile' };
+// Spielfiguren (Titelbildschirm), auch für Mitspieler sichtbar
+const OUTFITS = [
+  { name: 'Revolverheld', look: { shirt: 0x3a5a8a, pants: 0x2f2a26, hat: 0x5a3a22, vest: 0x4a3020, scarf: 0xb02020, coat: 0x6b4a2e, stache: true, band: 0x1a1a1a, hair: 0x3a2818 } },
+  { name: 'Kopfgeldjäger', look: { shirt: 0x4a4038, pants: 0x2a2622, hat: 0x1e1a16, hatStyle: 'flat', coat: 0x2a2420, bandolier: true, beard: true, hair: 0x2a1a10, skin: 0xc48a5e } },
+  { name: 'Vaquero', look: { shirt: 0xe0d0b0, pants: 0x4a3a2a, hat: 0xa08050, hatStyle: 'sombrero', band: 0x8a1a1a, poncho: 0x9a3a1a, poncho2: 0xe8c860, stache: true, hair: 0x1a1a1a, skin: 0xb07a52 } },
+  { name: 'Glücksspieler', look: { shirt: 0xf2eee4, pants: 0x1a1a1e, hat: 0x1a1a1a, hatStyle: 'bowler', vest: 0x7a1a2a, scarf: 0x1a1a1a, stache: true, hair: 0x4a3018 } },
+  { name: 'Rancher', look: { shirt: 0x8a3a2a, pants: 0x3a4a6a, hat: 0xd8c08a, band: 0x5a3a22, hair: 0x7a5a2a, skin: 0xe8c09a } },
+  { name: 'Gesetzloser', look: { shirt: 0x2a2a2a, pants: 0x1a1a1a, hat: 0x111111, mask: 0x222222, vest: 0x3a1a10, bandolier: true, hair: 0x1a1a1a } },
+  { name: 'Marshal', look: { shirt: 0x8a8a90, pants: 0x3a3a4a, hat: 0x6a5a3a, vest: 0x2a2a2a, badge: true, coat: 0x4a4a52, stache: true, hair: 0x8a8a8a } },
+  { name: 'Trapper', look: { shirt: 0x5a4a30, pants: 0x3a2a1a, hat: 0x6a4a2a, hatStyle: 'fur', coat: 0x7a5a3a, beard: true, hair: 0x5a3a20, skin: 0xd9a877 } },
+];
 const ITEMS = {
   tonic: { name: 'Heiltonikum', desc: 'Stellt 60 Gesundheit wieder her (Taste F).', price: 14, use(p) { if (p.hp >= p.maxHp) return 'Du bist bei voller Gesundheit'; p.hp = Math.min(p.maxHp, p.hp + 60); return ''; } },
   whiskey: { name: 'Whiskey', desc: '+25 Gesundheit, +40 Dead Eye.', price: 6, use(p) { p.hp = Math.min(p.maxHp, p.hp + 25); p.deadEye = Math.min(100, p.deadEye + 40); return ''; } },
@@ -28,7 +45,7 @@ const ITEMS = {
 const player = {
   x: 0, y: 0, z: 5, vx: 0, vz: 0, vy: 0, yaw: Math.PI, camYaw: 0, camPitch: 0.12, hp: 100, maxHp: 100, alive: true, grounded: true,
   mounted: false, horse: null, aiming: false, firing: false, weapon: 'rev', owned: ['rev', 'rifle'],
-  loaded: { rev: 6, rifle: 6 }, reserve: { pistol: 48, rifle: 18, shell: 0 },
+  loaded: { rev: 6, rifle: 6 }, reserve: { pistol: 48, rifle: 18, shell: 0, arrow: 0 },
   items: { tonic: 1, whiskey: 0, dynamite: 3, meat: 0, pelt: 0, watch: 0, ring: 0, nugget: 0 },
   reloadT: 0, cd: 0, throwCd: 0, money: 25, honor: 10, deadEye: 60, deadEyeOn: false, marks: [], seq: null, faceT: 0, phase: 0, lastHurt: -99, shake: 0, hurtFlash: 0, stepAcc: 0, deadT: 0, mouseMoveT: 0,
 };
@@ -73,7 +90,7 @@ function requestLock() { try { const pr = renderer.domElement.requestPointerLock
 
 function onKey(code) {
   const p = player;
-  if (game.menu) { if (code === 'Tab' || code === 'Escape' || code === 'KeyE') closeMenu(); return; }
+  if (game.menu) { if (code === 'Tab' || code === 'Escape' || code === 'KeyE' || code === 'KeyO') closeMenu(); return; }
   if (code === 'KeyP' || (code === 'Escape' && game.noLock)) { setPaused(!game.paused); return; }
   if (game.paused || !p.alive) return;
   if (code === 'KeyE') interact();
@@ -83,7 +100,8 @@ function onKey(code) {
   else if (code === 'KeyH') whistle();
   else if (code === 'KeyF') useItem('tonic');
   else if (code === 'KeyG') throwDynamite();
-  else if (code.startsWith('Digit') && +code[5] >= 1 && +code[5] <= 6) { const w = ORDER[+code[5] - 1]; if (p.owned.includes(w)) setWeapon(w); else toast('Diese Waffe besitzt du nicht', 1300); }
+  else if (code.startsWith('Digit')) { const list = ORDER.filter((k) => p.owned.includes(k)), n = +code[5], w = list[n === 0 ? 9 : n - 1]; if (w) setWeapon(w); else toast('Kein Waffenplatz ' + n, 1300); }
+  else if (code === 'KeyO') openMenu('room');
   else if (code === 'KeyM') { const b = $('bigmap'); b.style.display = b.style.display === 'flex' ? 'none' : 'flex'; }
   else if (code === 'KeyN') toast(SFX.toggleMusic() ? 'Musik an' : 'Musik aus', 1500);
   if (p.deadEyeOn && code === 'Space') executeDeadEye();
@@ -95,10 +113,14 @@ function setWeapon(w) {
   applyWeaponModel();
   toast(WEAPONS[w].name, 900);
 }
-function applyWeaponModel() {
-  const w = W();
-  pm.gun.visible = w.type === 'pistol'; pm.rifle.visible = w.type === 'long';
-  if (w.type === 'long') setLongGun(pm, w.len, w.color || 0x5a3a22);
+function applyWeaponModel() { setHeldWeapon(pm, player.weapon); }
+function setOutfit(i) {
+  const o = OUTFITS[i] || OUTFITS[0];
+  player.outfit = OUTFITS.indexOf(o);
+  if (pm) scene.remove(pm.g);
+  pm = makeHumanoid(o.look); scene.add(pm.g);
+  if (player.mounted) { pm.legs[0].rotation.z = -0.35; pm.legs[1].rotation.z = 0.35; }
+  applyWeaponModel();
 }
 function cycleWeapon(dir) {
   const p = player, list = ORDER.filter((w) => p.owned.includes(w));
@@ -157,7 +179,7 @@ function castRay(o, d, maxD, minT = 0) {
     t = raySphere(o, d, _c.set(h.x, h.y + 0.6, h.z), 0.38, minT);
     if (t > 0 && t < best.t) best = { t, kind: 'body', ent: h };
   }
-  if (window.MP) for (const r of MP.remotes.values()) {
+  if (window.MP && MP.pvp()) for (const r of MP.remotes.values()) {
     if (!r.alive) continue;
     let t = raySphere(o, d, _c.set(r.x, r.y + 1.86, r.z), 0.27, minT);
     if (t > 0 && t < best.t) best = { t, kind: 'pvp', head: true, ent: r };
@@ -234,16 +256,16 @@ function fire() {
     d.x += rand(-sp, sp); d.y += rand(-sp, sp); d.z += rand(-sp, sp); d.normalize();
     const hit = castRay(camera.position, d, w.range, camDist);
     const end = camera.position.clone().addScaledVector(d, hit.t);
-    if (i < 4) { spawnTracer(mz, end, 0xfff0b0, 0.07); if (window.MP) MP.sendShot(mz, end); }
+    if (i < 4) { spawnTracer(mz, end, w.tracer || 0xfff0b0, w.silent ? 0.2 : 0.07); if (window.MP) MP.sendShot(mz, end, p.weapon); }
     processHit(hit, w, end, w.pellets > 1 ? clamp(1 - hit.t / w.range, 0.12, 1) : 1);
   }
-  muzzleFlash(mz);
-  SFX.shot(0, w.heavy);
+  if (w.silent) SFX.click(); else { muzzleFlash(mz); SFX.shot(0, w.heavy); }
   p.camPitch += w.recoil * (p.aiming ? 0.6 : 1); p.shake = Math.max(p.shake, w.heavy ? 0.08 : 0.04);
   p.faceT = 1.4; game.lastShot = performance.now();
   if (game.duel && game.duel.state === 'count') {
     game.duel.state = 'cheat'; addHonor(-6); const d = game.duelist; d.state = 'combat'; d.alertDelay = 0.25; toast('Unehrenhaft! Ehre −6', 2200);
   }
+  if (w.silent) return;
   alarm(p.x, p.z, 85);
   if (Math.hypot(p.x - TOWN.x, p.z - TOWN.z) < TOWN.r - 10 && game.wanted === 0 && !game.duel) {
     for (const h of humans) if (!h.dead && (h.kind === 'civilian' || h.kind === 'lawman') && Math.hypot(h.x - p.x, h.z - p.z) < 45 && losClear(h.x, h.eye, h.z, p.x, p.y + 1.5, p.z)) { commitCrime(1); break; }
@@ -276,6 +298,7 @@ function throwDynamite() {
   const vel = _f.clone().multiplyScalar(19); vel.y += 4.5;
   if (p.mounted) { vel.x += Math.sin(p.horse.yaw) * p.horse.speed * 0.8; vel.z += Math.cos(p.horse.yaw) * p.horse.speed * 0.8; }
   spawnBomb(from, vel, 2.6, true);
+  if (window.MP) MP.sendBomb(from, vel);
   p.faceT = 1.0; SFX.click();
 }
 function damagePlayer(d, fx, fz) {
@@ -409,8 +432,8 @@ function loot(c) {
   if (m) { p.money += m; txt.push('$' + m); }
   if (c.kind !== 'civilian') {
     const v = c.variant;
-    if (v === 'shotgun') { const n = irand(3, 6); p.reserve.shell += n; txt.push(n + ' Schrotpatronen'); }
-    else if (v === 'rifle') { const n = irand(3, 6); p.reserve.rifle += n; txt.push(n + ' Gewehrpatronen'); }
+    if (v === 'shotgun' || v === 'sawedoff') { const n = irand(3, 6); p.reserve.shell += n; txt.push(n + ' Schrotpatronen'); }
+    else if (v === 'rifle' || v === 'carbine') { const n = irand(3, 6); p.reserve.rifle += n; txt.push(n + ' Gewehrpatronen'); }
     else { const n = irand(4, 10); p.reserve.pistol += n; txt.push(n + ' Kugeln'); }
     if (v === 'dynamiter') { p.items.dynamite++; txt.push('1 Dynamit'); }
     if (Math.random() < 0.15) { p.items.tonic++; txt.push('Heiltonikum'); }
@@ -429,6 +452,7 @@ const SHOPS = {
       { name: 'Revolverkugeln ×24', price: 8, fn: (p) => { p.reserve.pistol += 24; } },
       { name: 'Gewehrpatronen ×12', price: 9, fn: (p) => { p.reserve.rifle += 12; } },
       { name: 'Schrotpatronen ×10', price: 9, fn: (p) => { p.reserve.shell += 10; } },
+      { name: 'Pfeile ×12', price: 6, fn: (p) => { p.reserve.arrow += 12; } },
       { name: 'Heiltonikum', price: 14, fn: (p) => { p.items.tonic++; } },
       { name: 'Dynamit ×2', price: 16, fn: (p) => { p.items.dynamite += 2; } },
       { name: 'Whiskey-Flasche', price: 6, fn: (p) => { p.items.whiskey++; } },
@@ -436,10 +460,11 @@ const SHOPS = {
   },
   gunsmith: {
     title: 'Waffenhändler', intro: 'Neue Eisen für harte Zeiten.',
-    rows: ['schof', 'mauser', 'shotgun', 'sniper'].map((k) => ({ weapon: k, name: WEAPONS[k].name, desc: WEAPONS[k].desc, price: WEAPONS[k].price })).concat([
+    rows: ['navy', 'schof', 'lemat', 'mauser', 'sawedoff', 'carbine', 'shotgun', 'pump', 'sniper', 'bow'].map((k) => ({ weapon: k, name: WEAPONS[k].name, desc: WEAPONS[k].desc, price: WEAPONS[k].price })).concat([
       { name: 'Revolverkugeln ×24', price: 10, fn: (p) => { p.reserve.pistol += 24; } },
       { name: 'Gewehrpatronen ×12', price: 12, fn: (p) => { p.reserve.rifle += 12; } },
       { name: 'Schrotpatronen ×10', price: 12, fn: (p) => { p.reserve.shell += 10; } },
+      { name: 'Pfeile ×12', price: 8, fn: (p) => { p.reserve.arrow += 12; } },
     ]),
   },
   saloon: {
@@ -479,6 +504,8 @@ function renderMenu() {
         <div class="col"><h3>Vorräte &amp; Munition</h3>${supply}</div>
         <div class="col"><h3>Beute <small>(Wert $${lootValue()})</small></h3>${loot}<h3>Journal</h3><div class="row"><div class="rn"><b>Auftrag</b><small>${q.t}</small></div></div>${bnt}</div>
       </div><div class="mf">Tab / Esc = schließen · Beute verkaufst du im Kramladen</div>`;
+  } else if (game.menu === 'room') {
+    m.innerHTML = window.MP ? MP.roomHTML() : '<div class="mh"><h2>RAUM</h2></div><p class="intro">Mehrspieler nicht verfügbar.</p>';
   } else {
     const sh = SHOPS[game.menuArg];
     const rows = sh.rows.map((r, i) => {
@@ -495,6 +522,10 @@ function menuClick(e) {
   const p = player, id = b.dataset.id;
   if (b.dataset.act === 'equip') { p.weapon = id; p.reloadT = 0; applyWeaponModel(); }
   else if (b.dataset.act === 'use') useItem(id);
+  else if (b.dataset.act === 'kick') MP.kick(id);
+  else if (b.dataset.act === 'npcs') MP.setNpcs(id !== '1');
+  else if (b.dataset.act === 'pvp') MP.setPvp(id !== '1');
+  else if (b.dataset.act === 'copy') { const link = MP.inviteLink(); Promise.resolve().then(() => navigator.clipboard.writeText(link)).then(() => toast('Einladungslink kopiert', 1500), () => toast(link, 6000)); }
   else if (b.dataset.act === 'sell') { const v = lootValue(); p.money += v; for (const k in ITEMS) if (ITEMS[k].sell) p.items[k] = 0; toast(`Beute verkauft: $${v}`, 2000); SFX.coin(); }
   else if (b.dataset.act === 'buy') {
     const r = SHOPS[game.menuArg].rows[+id];
@@ -505,6 +536,21 @@ function menuClick(e) {
     SFX.coin();
   }
   renderMenu();
+}
+
+// ---------- NPCs an/aus (Raumeinstellung des Hosts) ----------
+const npcStash = { humans: [], animals: [] };
+function setNpcsEnabled(on) {
+  if (!on === !!game.npcsOff) return;
+  game.npcsOff = !on;
+  const move = (from, to) => { for (const e of from) { if (on) scene.add(e.g); else scene.remove(e.g); to.push(e); } from.length = 0; };
+  if (on) { move(npcStash.humans, humans); move(npcStash.animals, animals); }
+  else {
+    move(humans, npcStash.humans); move(animals, npcStash.animals);
+    if (player.deadEyeOn) endDeadEye();
+    if (game.duel) game.duel = null;
+    game.wanted = 0;
+  }
 }
 
 // ---------- Duell ----------
@@ -556,6 +602,7 @@ function talkSheriff() {
 }
 function updateQuest() {
   const q = QUEST[game.quest];
+  if (game.npcsOff) return;
   if (q.kind === 'clear' && campAlive(q.camp) === 0) {
     game.pending = q.reward; banner('MISSION ABGESCHLOSSEN', q.done + ' – Belohnung beim Sheriff abholen'); SFX.fanfare(); game.quest++;
   }
@@ -707,6 +754,7 @@ function drawMarkers(ctx, s) {
     ctx.beginPath(); ctx.arc(h.x, h.z, 2.6 / s, 0, 7); ctx.fill();
   }
   ctx.fillStyle = '#7a4a2a'; ctx.beginPath(); ctx.arc(playerHorse.x, playerHorse.z, 3 / s, 0, 7); ctx.fill();
+  if (window.MP) for (const r of MP.remotes.values()) { ctx.fillStyle = r.alive ? '#50d8ff' : '#6a8a90'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1 / s; ctx.beginPath(); ctx.arc(r.x, r.z, 3.4 / s, 0, 7); ctx.fill(); ctx.stroke(); }
   const qt = questTarget();
   if (qt) {
     ctx.save(); ctx.translate(qt.x, qt.z); ctx.rotate(Math.PI / 4); ctx.fillStyle = '#ffd040'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5 / s;
@@ -784,7 +832,7 @@ function updateHUD(rdt) {
   if (p.aiming || p.deadEyeOn) {
     camForward(_f);
     const hit = castRay(camera.position, _f, 150, 2);
-    cross.classList.toggle('enemy', ((hit.kind === 'head' || hit.kind === 'body') && hit.ent.kind !== 'civilian') || hit.kind === 'explosive');
+    cross.classList.toggle('enemy', ((hit.kind === 'head' || hit.kind === 'body') && hit.ent.kind !== 'civilian') || hit.kind === 'explosive' || hit.kind === 'pvp');
   } else cross.classList.remove('enemy');
   while (marksEls.length < p.marks.length) { const d = document.createElement('div'); d.className = 'mark'; d.textContent = '✕'; $('marks').appendChild(d); marksEls.push(d); }
   marksEls.forEach((el, i) => {
@@ -857,7 +905,7 @@ function frame(now) {
       if (game.wantedT <= 0) { game.wanted--; game.wantedT = 25; if (game.wanted === 0) toast('Du bist nicht mehr gesucht', 2500); }
       game.lawT -= dt;
       const spawned = humans.filter((h) => h.spawned && !h.dead).length;
-      if (game.lawT <= 0 && spawned < 2 * game.wanted + 1 && p.alive) {
+      if (game.lawT <= 0 && spawned < 2 * game.wanted + 1 && p.alive && !game.npcsOff) {
         const a = rand(0, 6.28), d = rand(65, 90), x = clamp(p.x + Math.cos(a) * d, -700, 700), z = clamp(p.z + Math.sin(a) * d, -700, 700);
         if (heightAt(x, z) > WATER_Y + 1) { const l = new Human('lawman', x, z, { spawned: true, variant: Math.random() < 0.35 ? 'shotgun' : 'gun' }); l.state = 'combat'; l.alertDelay = 1; }
         game.lawT = 6;
@@ -885,15 +933,16 @@ function frame(now) {
 function init() {
   const loading = $('loading');
   $('menubody').addEventListener('click', menuClick);
+  $('mpOutfit').innerHTML = OUTFITS.map((o, i) => `<option value="${i}">${o.name}</option>`).join('');
+  try { const so = +localStorage.getItem('dr-outfit'); if (OUTFITS[so]) $('mpOutfit').value = so; } catch (e) { /* kein Speicher */ }
+  $('mpOutfit').addEventListener('change', () => { try { localStorage.setItem('dr-outfit', $('mpOutfit').value); } catch (e) { /* egal */ } });
   $('menuclose').addEventListener('click', closeMenu);
   setTimeout(() => {
     try {
       buildWorld();
       populate();
       buildMapImage();
-      pm = makeHumanoid({ shirt: 0x3a5a8a, pants: 0x2f2a26, hat: 0x5a3a22, vest: 0x4a3020, scarf: 0xb02020, coat: 0x6b4a2e, stache: true, band: 0x1a1a1a, hair: 0x3a2818 });
-      scene.add(pm.g);
-      applyWeaponModel();
+      setOutfit(0);
       player.y = heightAt(player.x, player.z);
       camera.position.set(40, 20, 40);
       loading.style.display = 'none'; $('title').style.display = 'flex';
@@ -903,6 +952,7 @@ function init() {
   $('btnPlay').addEventListener('click', () => {
     SFX.init();
     game.started = true; $('title').style.display = 'none'; $('hud').style.display = 'block';
+    setOutfit(+$('mpOutfit').value || 0);
     player.camYaw = 0; player.firing = false;
     requestLock();
     setTimeout(() => { if (!document.pointerLockElement && !game.noLock) { game.noLock = true; toast('Blick mit Pfeiltasten (oder Maus, wenn gesperrt). P = Pause', 5000); } }, 600);
