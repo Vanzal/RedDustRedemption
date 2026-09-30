@@ -89,7 +89,7 @@ function makeHumanoid(o) {
   if (o.scarf) addMesh(g, cyl(0.1, 0.12, 0.1), lam(o.scarf), 0, 1.66, 0.01, false);
   if (o.mask) addMesh(g, new THREE.BoxGeometry(0.25, 0.11, 0.26), lam(o.mask), 0, 1.74, 0.01, false);
   if (o.beard) { m = addMesh(g, new THREE.SphereGeometry(0.12, 10, 8), lam(o.hair || 0x2a1a10), 0, 1.7, 0.05, false); m.scale.set(1, 0.8, 0.8); }
-  if (o.poncho) { m = addMesh(g, new THREE.ConeGeometry(0.52, 0.62, 12, 1, true), lam(o.poncho, { side: THREE.DoubleSide }), 0, 1.33, 0); m.scale.z = 0.8; addMesh(g, cyl(0.3, 0.3, 0.05, 12), lam(o.poncho2 || 0xe8d8b0), 0, 1.06, 0, false).scale.z = 0.8; }
+  if (o.poncho) { m = addMesh(g, cyl(0.2, 0.5, 0.58, 12), lam(o.poncho), 0, 1.35, 0); m.scale.z = 0.72; addMesh(g, cyl(0.505, 0.505, 0.06, 12), lam(o.poncho2 || 0xe8d8b0), 0, 1.1, 0, false).scale.z = 0.73; }
   if (o.bandolier) { m = addMesh(g, new THREE.BoxGeometry(0.07, 0.72, 0.04), lam(0x3a2414), 0.02, 1.3, 0.2, false); m.rotation.z = 0.7; }
   if (o.hat !== undefined && o.hat !== null) {
     const hs = o.hatStyle || 'cowboy', hm = lam(o.hat);
@@ -99,7 +99,7 @@ function makeHumanoid(o) {
       addMesh(g, cyl(0.172, 0.172, 0.035, 12), lam(o.band || 0x1a1a1a), 0, 1.97, 0, false);
     } else if (hs === 'sombrero') {
       addMesh(g, cyl(0.62, 0.6, 0.03, 18), hm, 0, 1.93, 0);
-      addMesh(g, new THREE.ConeGeometry(0.2, 0.36, 12), hm, 0, 2.12, 0);
+      addMesh(g, cyl(0.1, 0.19, 0.3, 12), hm, 0, 2.08, 0);
       addMesh(g, cyl(0.19, 0.2, 0.05, 12), lam(o.band || 0xa02020), 0, 1.97, 0, false);
     } else if (hs === 'flat') {
       addMesh(g, cyl(0.34, 0.34, 0.025, 14), hm, 0, 1.93, 0);
