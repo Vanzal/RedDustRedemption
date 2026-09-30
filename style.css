@@ -110,3 +110,10 @@ button.big.small { font-size: 18px; padding: 8px 26px; }
 #killfeed div { margin-bottom: 3px; transition: opacity .6s; }
 .row .tag { font-size: 12px; color: #a8e07a; margin-left: 6px; }
 .row button.danger { background: linear-gradient(#e89070, #a83a20); color: #fff; }
+#modeSel { display: flex; flex-direction: column; align-items: center; gap: 14px; margin: 14px 0 6px; }
+#modeSel .big { width: min(400px, 86vw); padding-left: 0; padding-right: 0; }
+.modeHint { font-size: 14px; color: #d8c290; line-height: 1.5; }
+#mpbox { display: none; }
+#title > #mpOutfitLbl { font-size: 16px; color: #d8c290; display: flex; align-items: center; gap: 8px; }
+#title select { font-family: inherit; font-size: 16px; padding: 6px 10px; background: rgba(10,6,2,.7); color: #f2e2b8; border: 1px solid #c9a86a; }
+.mpBtns { display: flex; gap: 12px; justify-content: center; align-items: center; margin-top: 6px; }

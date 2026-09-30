@@ -815,8 +815,8 @@ function updateHUD(rdt) {
   $('stars').textContent = game.wanted > 0 ? '★'.repeat(game.wanted) + '☆'.repeat(3 - game.wanted) : '';
   $('honor').style.left = (50 + p.honor / 2) + '%';
   const q = QUEST[game.quest];
-  let ot = q.t;
-  if (q.kind === 'clear') ot += `  [${campTotal(q.camp) - campAlive(q.camp)}/${campTotal(q.camp)}]`;
+  let ot = game.npcsOff ? (game.mode === 'solo' ? 'NPCs sind ausgeschaltet – freies Spiel' : 'Mehrspieler – freies Spiel mit deinen Freunden') : q.t;
+  if (q.kind === 'clear' && !game.npcsOff) ot += `  [${campTotal(q.camp) - campAlive(q.camp)}/${campTotal(q.camp)}]`;
   $('objective').textContent = ot;
   const hh = Math.floor(gameHours), mm = Math.floor((gameHours % 1) * 60);
   $('clock').textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}` + (rain > 0.3 ? '  Regen' : '');
@@ -949,14 +949,20 @@ function init() {
       requestAnimationFrame(frame);
     } catch (e) { loading.textContent = 'Fehler beim Laden: ' + e.message; console.error(e); }
   }, 50);
+  const showMp = (on) => { $('modeSel').style.display = on ? 'none' : 'flex'; $('mpbox').style.display = on ? 'flex' : 'none'; if (on) $('mpName').focus(); };
+  $('btnSolo').addEventListener('click', () => { game.mode = 'solo'; $('btnPlay').click(); });
+  $('btnMulti').addEventListener('click', () => { game.mode = 'mp'; showMp(true); });
+  $('btnBack').addEventListener('click', () => showMp(false));
+  if (new URLSearchParams(location.search).get('room')) { game.mode = 'mp'; showMp(true); }
   $('btnPlay').addEventListener('click', () => {
     SFX.init();
     game.started = true; $('title').style.display = 'none'; $('hud').style.display = 'block';
     setOutfit(+$('mpOutfit').value || 0);
+    if (game.mode !== 'solo') setNpcsEnabled(false); // Mehrspieler: keine NPCs
     player.camYaw = 0; player.firing = false;
     requestLock();
     setTimeout(() => { if (!document.pointerLockElement && !game.noLock) { game.noLock = true; toast('Blick mit Pfeiltasten (oder Maus, wenn gesperrt). P = Pause', 5000); } }, 600);
-    toast('Willkommen in Copper Creek. Sprich mit dem Sheriff!', 4500);
+    if (game.mode === 'solo') toast('Willkommen in Copper Creek. Sprich mit dem Sheriff!', 4500);
   });
   $('pause').addEventListener('click', () => {
     if (game.noLock) { setPaused(false); return; }

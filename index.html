@@ -49,14 +49,18 @@
 <div id="title" class="overlay">
   <h1>DUST &amp; REDEMPTION</h1>
   <h2>EINE WESTERN-GESCHICHTE</h2>
+  <label id="mpOutfitLbl">Figur <select id="mpOutfit"></select></label>
+  <div id="modeSel">
+    <button class="big" id="btnSolo">EINZELSPIELER</button>
+    <button class="big" id="btnMulti">MEHRSPIELER</button>
+    <div class="modeHint">Einzelspieler: Geschichte, Banditen, Kopfgelder und Tiere.<br>Mehrspieler: Freies Spiel mit Freunden – ohne NPCs.</div>
+  </div>
   <div id="mpbox">
     <input id="mpName" maxlength="14" placeholder="Dein Name" autocomplete="off">
     <input id="mpRoom" maxlength="8" placeholder="Raumcode (leer = neuer Raum)" autocomplete="off">
-    <label id="mpOutfitLbl">Figur <select id="mpOutfit"></select></label>
-    <label id="mpSoloLbl"><input type="checkbox" id="mpSolo"> Alleine spielen (ohne Raum)</label>
     <div id="mpStatus">Leer lassen = neuen Raum er&ouml;ffnen, Code an Freunde schicken. Oder Code eingeben zum Beitreten.</div>
+    <div class="mpBtns"><button class="big small" id="btnBack">Zur&uuml;ck</button><button class="big" id="btnPlay">LOS</button></div>
   </div>
-  <button class="big" id="btnPlay">SPIELEN</button>
   <div id="controls">
     <div><b>W A S D</b> Laufen / Reiten</div><div><b>Shift</b> Sprinten / Galopp</div><div><b>Leertaste</b> Springen</div><div><b>Strg</b> Langsam gehen</div>
     <div><b>Maus</b> Umsehen</div><div><b>Rechte Maus</b> Zielen</div><div><b>Linke Maus</b> Schießen</div><div><b>R</b> Nachladen</div>

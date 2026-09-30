@@ -20,7 +20,7 @@
   const conns = new Map(); // nur Host: id -> DataConnection
   const lastSeen = new Map(); // id -> Zeitstempel (ms)
   const kicked = new Set(); // nur Host
-  const settings = { npcs: true, pvp: true };
+  const settings = { pvp: true };
   let peer = null, isHost = false, hostConn = null, hostId = '', myId = null, room = '', myName = 'Cowboy', active = false, joinTimer = 0, retries = 0, sendTimer = 0, worldTimer = 0, left = false;
 
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -173,10 +173,8 @@
 
   function applySettings(s, announce) {
     if (!s) return;
-    const npcChanged = !!s.npcs !== settings.npcs, pvpChanged = !!s.pvp !== settings.pvp;
-    settings.npcs = !!s.npcs; settings.pvp = !!s.pvp;
-    setNpcsEnabled(settings.npcs);
-    if (announce && npcChanged) toast(settings.npcs ? 'Host hat NPCs aktiviert' : 'Host hat alle NPCs deaktiviert', 3000);
+    const pvpChanged = !!s.pvp !== settings.pvp;
+    settings.pvp = !!s.pvp;
     if (announce && pvpChanged) toast(settings.pvp ? 'PvP ist jetzt an' : 'PvP ist jetzt aus', 3000);
     if (game.menu === 'room') renderMenu();
   }
@@ -212,7 +210,8 @@
     try { if (peer) peer.destroy(); } catch (e) { /* egal */ }
     for (const id of [...remotes.keys()]) dropRemote(id);
     roster.clear(); conns.clear();
-    settings.npcs = true; settings.pvp = true; setNpcsEnabled(true); weatherT = 60;
+    settings.pvp = true; weatherT = 60;
+    game.mode = 'solo'; setNpcsEnabled(true); // ohne Raum: zurück zum Einzelspieler-Inhalt
     updateHud();
     if (reason) { banner('RAUM VERLASSEN', reason, 6000); status(reason); }
   }
@@ -293,14 +292,13 @@
       toast(`${n} wurde gekickt`, 2500);
     },
     setNpcs(on) {
-      if (active && !isHost) return;
-      applySettings({ npcs: on, pvp: settings.pvp }, false);
-      toast(on ? 'NPCs aktiviert' : 'Alle NPCs deaktiviert', 2000);
-      if (active) sendAll({ t: 'cfg', set: settings });
+      if (active) return; // Mehrspieler hat nie NPCs
+      setNpcsEnabled(on); toast(on ? 'NPCs aktiviert' : 'Alle NPCs deaktiviert', 2000);
+      if (game.menu === 'room') renderMenu();
     },
     setPvp(on) {
       if (!active || !isHost) return;
-      applySettings({ npcs: settings.npcs, pvp: on }, false);
+      applySettings({ pvp: on }, false);
       toast(on ? 'PvP an' : 'PvP aus', 2000);
       sendAll({ t: 'cfg', set: settings });
     },
@@ -315,8 +313,7 @@
         ${owner ? '' : '<p class="intro">Nur der Host kann Spieler kicken und Einstellungen ändern.</p>'}
         <div class="cols"><div class="col"><h3>Spieler</h3>${players}${invite}</div>
         <div class="col"><h3>${owner ? 'Admin' : 'Einstellungen'}</h3>
-          ${toggle('npcs', settings.npcs, 'NPCs', 'Banditen, Bürger, Gesetzeshüter und Tiere', owner)}
-          ${active ? toggle('pvp', settings.pvp, 'PvP', 'Spieler können sich gegenseitig verletzen', isHost) : ''}
+          ${active ? toggle('pvp', settings.pvp, 'PvP', 'Spieler können sich gegenseitig verletzen', isHost) + '<p class="intro">Im Mehrspieler gibt es keine NPCs.</p>' : toggle('npcs', !game.npcsOff, 'NPCs', 'Banditen, Bürger, Gesetzeshüter und Tiere', true)}
         </div></div><div class="mf">O / Esc = schließen</div>`;
     },
     tick(dt) {
@@ -347,7 +344,7 @@
 
   addEventListener('beforeunload', () => { if (!active) return; if (isHost) for (const c of conns.values()) sendTo(c, { t: 'kick', reason: 'Der Host hat den Raum geschlossen' }); else sendAll({ t: 'l', id: myId }); });
   const $el = (id) => document.getElementById(id);
-  $el('btnPlay').addEventListener('click', () => { if (!peer && !left) start($el('mpName').value, $el('mpRoom').value, $el('mpSolo').checked); setTimeout(updateHud, 0); });
+  $el('btnPlay').addEventListener('click', () => { if (!peer && !left) start($el('mpName').value, $el('mpRoom').value, game.mode === 'solo'); setTimeout(updateHud, 0); });
   for (const id of ['mpName', 'mpRoom']) $el(id).addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') $el('btnPlay').click(); });
   const saved = store('dr-name'); if (saved) $el('mpName').value = saved;
   // Raumcode per Link: ?room=ABCD
