@@ -243,17 +243,24 @@
     status(`Verbinde mit Raum ${room}…`); toast(`Verbinde mit Raum ${room}…`, 20000);
     peer = new Peer(PEER_OPTS);
     const fail = (why) => { if (!active) leave(why); };
-    joinTimer = setTimeout(() => fail(`Keine Verbindung zu Raum ${room}. Firewall/NAT blockiert oder Raum geschlossen. Du spielst alleine.`), 25000);
-    peer.on('open', (id) => {
-      myId = id;
+    joinTimer = setTimeout(() => fail(`Keine Verbindung zu Raum ${room}. Firewall/NAT blockiert oder Raum geschlossen. Du spielst alleine.`), 40000);
+    let tries = 0;
+    const connect = () => {
+      if (left || active) return;
+      try { if (hostConn) hostConn.close(); } catch (e) { /* egal */ }
       hostConn = peer.connect(PREFIX + room, { reliable: true, serialization: 'json' });
       hostConn.on('open', () => { lastSeen.set('host', performance.now()); sendTo(hostConn, { t: 'hi', v: PROTO, n: myName, o: player.outfit | 0 }); });
       hostConn.on('data', (m) => { lastSeen.set('host', performance.now()); if (m && typeof m === 'object') handle(m); });
-      hostConn.on('close', () => { if (!left) leave('Der Host hat den Raum geschlossen'); });
+      hostConn.on('close', () => { if (!left) leave(active ? 'Der Host hat den Raum geschlossen' : `Verbindung zu Raum ${room} fehlgeschlagen`); });
       hostConn.on('error', () => fail(`Verbindung zu Raum ${room} fehlgeschlagen`));
+    };
+    peer.on('open', (id) => { myId = id; connect(); });
+    peer.on('error', (e) => {
+      // Raum evtl. noch nicht beim Vermittlungsserver registriert: ein paar Mal erneut versuchen
+      if (e.type === 'peer-unavailable' && !active && tries++ < 3) { status(`Suche Raum ${room}… (${tries})`); setTimeout(connect, 2000); return; }
+      fail(e.type === 'peer-unavailable' ? `Raum ${room} nicht gefunden – du spielst alleine` : `Netzwerkfehler (${e.type}) – du spielst alleine`);
     });
     peer.on('disconnected', () => { if (!left && !active) setTimeout(() => { if (!left && peer.disconnected && !peer.destroyed) peer.reconnect(); }, 2000); });
-    peer.on('error', (e) => fail(e.type === 'peer-unavailable' ? `Raum ${room} nicht gefunden – du spielst alleine` : `Netzwerkfehler (${e.type}) – du spielst alleine`));
   }
   function start(name, code, solo) {
     myName = cleanName(name); store('dr-name', myName);
