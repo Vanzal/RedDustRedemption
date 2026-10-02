@@ -50,69 +50,175 @@ function updateFX(dt) {
 }
 
 // ---------- Menschen-Modell (runde Formen, Gesicht, Hut, Holster) ----------
+// ---------- Figuren: Teile werden zu wenigen Meshes mit Vertexfarben verschmolzen (mehr Detail, weniger Draw-Calls) ----------
+const VCMAT = new THREE.MeshLambertMaterial({ vertexColors: true });
+const _gc = {};
+function gcyl(rt, rb, h, seg = 14) { const k = `c${rt},${rb},${h},${seg}`; return _gc[k] || (_gc[k] = new THREE.CylinderGeometry(rt, rb, h, seg)); }
+function gsph(r, ws = 14, hs = 10) { const k = `s${r},${ws},${hs}`; return _gc[k] || (_gc[k] = new THREE.SphereGeometry(r, ws, hs)); }
+function gbox(w, h, d) { const k = `b${w},${h},${d}`; return _gc[k] || (_gc[k] = new THREE.BoxGeometry(w, h, d)); }
+function gcone(r, h, seg = 8) { const k = `n${r},${h},${seg}`; return _gc[k] || (_gc[k] = new THREE.ConeGeometry(r, h, seg)); }
+function gtor(r, t, rs = 6, ts = 14) { const k = `t${r},${t},${rs},${ts}`; return _gc[k] || (_gc[k] = new THREE.TorusGeometry(r, t, rs, ts)); }
+const _sc = new THREE.Color();
+function shade(hex, k) { _sc.setHex(hex); _sc.multiplyScalar(k); return _sc.getHex(); }
+function PB() { return []; }
+// Teil hinzufügen: Geometrie, Farbe, Position, Rotation (rx,ry,rz), Skalierung (sx,sy,sz)
+function pAdd(pb, geo, color, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) { pb.push({ geo, color, m: MX(x, y, z, rx, ry, rz, sx, sy, sz) }); }
+// Verschmelzen; optional unten abdunkeln (ao = [y0, y1, minFaktor]) für weiche Schattierung
+function pBake(pb, parent, ao) {
+  const geo = mergeParts(pb);
+  if (ao) {
+    const p = geo.attributes.position, c = geo.attributes.color;
+    for (let i = 0; i < p.count; i++) { const k = ao[2] + (1 - ao[2]) * clamp((p.getY(i) - ao[0]) / (ao[1] - ao[0]), 0, 1); c.setXYZ(i, c.getX(i) * k, c.getY(i) * k, c.getZ(i) * k); }
+  }
+  const m = new THREE.Mesh(geo, VCMAT); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
+}
+// Gebogene Hutkrempe: Seiten nach oben, vorne leicht nach unten
+function brimGeo(r, th, curl, droop) {
+  const g = new THREE.CylinderGeometry(r, r, th, 32, 1);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i) / r, z = p.getZ(i) / r; p.setY(i, p.getY(i) + curl * x * x - droop * Math.max(0, z) * Math.max(0, z) * 1.4 + droop * 0.5 * Math.max(0, -z)); }
+  g.computeVertexNormals(); return g;
+}
+const _brims = {};
+function gbrim(r, th, curl, droop) { const k = `${r},${th},${curl},${droop}`; return _brims[k] || (_brims[k] = brimGeo(r, th, curl, droop)); }
+
 function makeHumanoid(o) {
   const g = new THREE.Group(); g.rotation.order = 'YXZ';
-  const skin = o.skin || 0xd9a877;
+  const skin = o.skin || 0xd9a877, skinD = shade(skin, 0.8);
+  const pants = o.pants || 0x3a4a5a, shirt = o.shirt || 0x8a4a3a, boot = 0x2a1c14, leather = 0x4a2e1a, dark = 0x1a120c, brass = 0xd8b040;
+  const hair = o.hair === undefined ? 0x3a2818 : o.hair;
   const legs = [], arms = [];
-  const legMat = lam(o.pants || 0x3a4a5a), bootMat = lam(0x2a1c14), shirt = lam(o.shirt || 0x8a4a3a), dark = lam(0x1a120c);
-  const cyl = (rt, rb, h, seg = 9) => new THREE.CylinderGeometry(rt, rb, h, seg);
+  // Beine: Oberschenkel, Knie, Schienbein, Hosenaufschlag, Stiefel mit Absatz und Sporn
   for (const s of [-1, 1]) {
     const leg = new THREE.Group(); leg.position.set(s * 0.12, 0.93, 0); g.add(leg);
-    addMesh(leg, cyl(0.105, 0.078, 0.62), legMat, 0, -0.31, 0);
-    addMesh(leg, cyl(0.078, 0.07, 0.3), legMat, 0, -0.68, 0);
-    addMesh(leg, cyl(0.085, 0.1, 0.32), bootMat, 0, -0.78, 0);
-    addMesh(leg, new THREE.BoxGeometry(0.15, 0.1, 0.3), bootMat, 0, -0.9, 0.06);
+    const b = PB();
+    pAdd(b, gsph(0.108, 12, 8), pants, 0, -0.03, 0);
+    pAdd(b, gcyl(0.108, 0.083, 0.46), pants, 0, -0.26, 0);
+    pAdd(b, gsph(0.085, 10, 8), pants, 0, -0.49, 0.005);
+    pAdd(b, gcyl(0.082, 0.07, 0.3), pants, 0, -0.63, 0);
+    pAdd(b, gcyl(0.086, 0.088, 0.05), shade(pants, 0.85), 0, -0.64, 0);
+    pAdd(b, gcyl(0.074, 0.092, 0.27), boot, 0, -0.77, 0);
+    pAdd(b, gcyl(0.095, 0.095, 0.03), shade(boot, 1.5), 0, -0.64, 0);
+    pAdd(b, gsph(0.5, 12, 8), boot, 0, -0.875, 0.075, 0, 0, 0, 0.17, 0.11, 0.36);
+    pAdd(b, gsph(0.5, 10, 6), shade(boot, 1.35), 0, -0.88, 0.17, 0, 0, 0, 0.14, 0.09, 0.14);
+    pAdd(b, gbox(0.12, 0.05, 0.1), dark, 0, -0.905, -0.065);
+    pAdd(b, gbox(0.13, 0.02, 0.34), dark, 0, -0.92, 0.06);
+    pAdd(b, gsph(0.02, 6, 4), 0xa0a0a0, 0, -0.84, -0.115);
+    pAdd(b, gcone(0.022, 0.05, 6), 0xa0a0a0, 0, -0.85, -0.14, -Math.PI / 2);
+    pBake(b, leg);
     legs.push(leg);
   }
-  let m = addMesh(g, cyl(0.235, 0.24, 0.22, 10), legMat, 0, 0.97, 0); m.scale.z = 0.75;
-  m = addMesh(g, cyl(0.27, 0.235, 0.6, 10), shirt, 0, 1.3, 0); m.scale.z = 0.72;
-  m = addMesh(g, cyl(0.245, 0.245, 0.07, 10), dark, 0, 1.0, 0); m.scale.z = 0.75;
-  addMesh(g, new THREE.BoxGeometry(0.07, 0.06, 0.03), lam(0xd8b040), 0, 1.0, 0.185, false);
-  addMesh(g, new THREE.BoxGeometry(0.09, 0.22, 0.12), lam(0x4a2e1a), 0.27, 0.86, 0.02, false);
-  if (o.vest) { m = addMesh(g, cyl(0.28, 0.245, 0.48, 10), lam(o.vest), 0, 1.32, 0); m.scale.set(1, 1, 0.76); }
-  if (o.coat) { m = addMesh(g, cyl(0.29, 0.4, 0.95, 10), lam(o.coat), 0, 0.82, -0.01); m.scale.z = 0.72; }
-  if (o.badge) addMesh(g, new THREE.CylinderGeometry(0.05, 0.05, 0.02, 5), lam(0xe8c040), 0.15, 1.44, 0.2, false).rotation.x = Math.PI / 2;
-  addMesh(g, cyl(0.055, 0.06, 0.1), lam(skin), 0, 1.62, 0, false);
+  // Rumpf, Kopf, Kleidung, Hut – alles statisch in einem Mesh
+  const b = PB();
+  pAdd(b, gcyl(0.235, 0.24, 0.22, 16), pants, 0, 0.97, 0, 0, 0, 0, 1, 1, 0.75);
+  pAdd(b, gcyl(0.27, 0.235, 0.6, 16), shirt, 0, 1.3, 0, 0, 0, 0, 1, 1, 0.72);
+  pAdd(b, gsph(0.28, 16, 10), shirt, 0, 1.52, 0, 0, 0, 0, 1, 0.5, 0.74);
+  pAdd(b, gtor(0.095, 0.024, 6, 14), shade(shirt, 1.12), 0, 1.6, 0, Math.PI / 2);
+  pAdd(b, gcyl(0.06, 0.068, 0.14, 10), skinD, 0, 1.65, 0);
+  pAdd(b, gcyl(0.245, 0.245, 0.07, 16), dark, 0, 1.0, 0, 0, 0, 0, 1, 1, 0.75);
+  pAdd(b, gbox(0.085, 0.065, 0.03), brass, 0, 1.0, 0.186);
+  pAdd(b, gbox(0.09, 0.22, 0.12), leather, 0.27, 0.86, 0.02);
+  pAdd(b, gbox(0.035, 0.08, 0.055), 0x5a3a22, 0.27, 0.99, 0.0);
+  pAdd(b, gbox(0.08, 0.07, 0.06), leather, -0.255, 0.975, 0.08);
+  if (o.vest) {
+    pAdd(b, gcyl(0.285, 0.248, 0.48, 16), o.vest, 0, 1.32, 0, 0, 0, 0, 1, 1, 0.76);
+    pAdd(b, gbox(0.075, 0.46, 0.02), shirt, 0, 1.32, 0.215);
+    for (let i = 0; i < 3; i++) pAdd(b, gsph(0.012, 5, 4), brass, 0, 1.18 + i * 0.12, 0.226);
+  }
+  if (o.coat) {
+    pAdd(b, gcyl(0.29, 0.4, 0.95, 18), o.coat, 0, 0.82, -0.01, 0, 0, 0, 1, 1, 0.72);
+    pAdd(b, gcyl(0.15, 0.22, 0.1, 14), o.coat, 0, 1.58, 0, 0, 0, 0, 1, 1, 0.9);
+    pAdd(b, gbox(0.02, 0.9, 0.02), shade(o.coat, 0.55), 0, 0.84, 0.262);
+    pAdd(b, gbox(0.09, 0.4, 0.03), shade(o.coat, 0.75), 0.1, 1.38, 0.2, 0, 0, 0.22);
+    pAdd(b, gbox(0.09, 0.4, 0.03), shade(o.coat, 0.75), -0.1, 1.38, 0.2, 0, 0, -0.22);
+  }
+  if (o.badge) pAdd(b, gcyl(0.05, 0.05, 0.02, 5), 0xe8c040, 0.15, 1.44, 0.2, Math.PI / 2);
+  if (o.poncho) {
+    pAdd(b, gcyl(0.2, 0.5, 0.58, 20), o.poncho, 0, 1.35, 0, 0, 0, 0, 1, 1, 0.72);
+    pAdd(b, gcyl(0.505, 0.505, 0.06, 20), o.poncho2 || 0xe8d8b0, 0, 1.1, 0, 0, 0, 0, 1, 1, 0.73);
+    pAdd(b, gcyl(0.28, 0.4, 0.05, 20), o.poncho2 || 0xe8d8b0, 0, 1.3, 0, 0, 0, 0, 1, 1, 0.73);
+    pAdd(b, gcyl(0.12, 0.2, 0.04, 14), o.poncho2 || 0xe8d8b0, 0, 1.63, 0);
+  }
+  if (o.bandolier) {
+    pAdd(b, gbox(0.07, 0.72, 0.04), 0x3a2414, 0.02, 1.3, 0.2, 0, 0, 0.7);
+    for (let i = -3; i <= 3; i++) pAdd(b, gcyl(0.016, 0.016, 0.06, 6), 0xc8a040, 0.02 - 0.093 * i, 1.3 + 0.109 * i, 0.226);
+  }
+  // Kopf
+  pAdd(b, gsph(0.135, 18, 14), skin, 0, 1.79, 0.005, 0, 0, 0, 1, 1.18, 1.08);
+  pAdd(b, gsph(0.105, 14, 10), skin, 0, 1.725, 0.035, 0, 0, 0, 1, 0.85, 1);
+  for (const s of [-1, 1]) {
+    pAdd(b, gsph(0.032, 8, 6), skinD, s * 0.136, 1.79, 0, 0, 0, 0, 0.5, 1, 0.8);
+    pAdd(b, gsph(0.017, 8, 6), 0xf2eee0, s * 0.05, 1.82, 0.135, 0, 0, 0, 1, 0.7, 0.5);
+    pAdd(b, gsph(0.0105, 6, 5), 0x14100c, s * 0.05, 1.82, 0.142, 0, 0, 0, 1, 1, 0.5);
+    pAdd(b, gbox(0.05, 0.012, 0.02), hair === null ? 0x3a2818 : hair, s * 0.05, 1.848, 0.136, 0, 0, -s * 0.15);
+  }
+  pAdd(b, gsph(0.027, 8, 6), skin, 0, 1.775, 0.146, 0, 0, 0, 0.8, 1.15, 1.3);
+  pAdd(b, gbox(0.024, 0.05, 0.03), skin, 0, 1.8, 0.14);
+  pAdd(b, gbox(0.05, 0.008, 0.01), shade(skin, 0.55), 0, 1.722, 0.14);
+  if (o.stache) for (const s of [-1, 1]) pAdd(b, gsph(0.034, 8, 6), hair === null ? 0x2a1a10 : (hair || 0x2a1a10), s * 0.032, 1.742, 0.143, 0, 0, -s * 0.25, 1.5, 0.55, 0.8);
+  if (hair !== null) {
+    pAdd(b, gsph(0.14, 16, 10), hair, 0, 1.84, -0.03, 0, 0, 0, 1, 0.9, 1);
+    for (const s of [-1, 1]) pAdd(b, gsph(0.04, 8, 6), hair, s * 0.115, 1.8, 0.03, 0, 0, 0, 0.4, 1.3, 1);
+  }
+  if (o.beard) pAdd(b, gsph(0.12, 14, 10), hair === null ? 0x2a1a10 : (hair || 0x2a1a10), 0, 1.69, 0.05, 0, 0, 0, 1, 0.8, 0.8);
+  if (o.scarf) {
+    pAdd(b, gcyl(0.1, 0.12, 0.1, 14), o.scarf, 0, 1.66, 0.01);
+    pAdd(b, gsph(0.04, 8, 6), shade(o.scarf, 0.85), 0.05, 1.6, 0.115);
+    pAdd(b, gbox(0.07, 0.17, 0.025), shade(o.scarf, 0.9), 0.06, 1.5, 0.19, 0.1, 0, 0.1);
+  }
+  if (o.mask) {
+    pAdd(b, gcyl(0.14, 0.13, 0.065, 16), o.mask, 0, 1.712, 0.014, 0, 0, 0, 1, 1, 1.1);
+    pAdd(b, gsph(0.035, 8, 6), shade(o.mask, 0.8), 0, 1.712, -0.15);
+    pAdd(b, gbox(0.06, 0.1, 0.02), shade(o.mask, 0.9), 0.03, 1.66, -0.15, 0.2, 0, 0.2);
+  }
+  // Hut mit gebogener Krempe
+  if (o.hat !== undefined && o.hat !== null) {
+    const hs = o.hatStyle || 'cowboy', hat = o.hat, hatD = shade(hat, 0.78), band = o.band;
+    if (hs === 'bowler') {
+      pAdd(b, gbrim(0.25, 0.025, 0.04, 0.01), hat, 0, 1.935, 0, 0, 0, 0, 1, 1, 1.06);
+      pAdd(b, gsph(0.17, 16, 10), hat, 0, 1.95, 0, 0, 0, 0, 1, 1.2, 1);
+      pAdd(b, gcyl(0.172, 0.176, 0.035, 14), band || 0x1a1a1a, 0, 1.965, 0);
+    } else if (hs === 'sombrero') {
+      pAdd(b, gbrim(0.62, 0.03, 0.17, 0.03), hat, 0, 1.92, 0);
+      pAdd(b, gcyl(0.1, 0.19, 0.3, 16), hat, 0, 2.08, 0);
+      pAdd(b, gsph(0.1, 10, 6), hat, 0, 2.23, 0, 0, 0, 0, 1, 0.4, 1);
+      pAdd(b, gcyl(0.192, 0.2, 0.05, 16), band || 0xa02020, 0, 1.97, 0);
+      pAdd(b, gbrim(0.585, 0.012, 0.17, 0.03), shade(band || 0xa02020, 1), 0, 1.925, 0);
+    } else if (hs === 'flat') {
+      pAdd(b, gbrim(0.34, 0.025, 0.02, 0.01), hat, 0, 1.93, 0, 0, 0, 0, 1, 1, 1.05);
+      pAdd(b, gcyl(0.18, 0.18, 0.13, 16), hat, 0, 2.0, 0);
+      pAdd(b, gcyl(0.17, 0.17, 0.01, 16), hatD, 0, 2.067, 0);
+      pAdd(b, gcyl(0.184, 0.184, 0.035, 16), band || 0x2a1a10, 0, 1.955, 0);
+    } else if (hs === 'fur') {
+      pAdd(b, gcyl(0.17, 0.18, 0.2, 12), hat, 0, 1.98, 0);
+      pAdd(b, gsph(0.17, 12, 8), hat, 0, 2.07, 0, 0, 0, 0, 1, 0.55, 1);
+      for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; pAdd(b, gsph(0.05, 6, 5), hatD, Math.cos(a) * 0.175, 1.9, Math.sin(a) * 0.175); }
+      pAdd(b, gcyl(0.035, 0.02, 0.4, 6), hat, 0, 1.9, -0.25, 0.9);
+      pAdd(b, gcyl(0.036, 0.036, 0.04, 6), hatD, 0, 1.76, -0.43, 0.9);
+    } else {
+      pAdd(b, gbrim(0.36, 0.03, 0.1, 0.05), hat, 0, 1.93, 0.01, 0, 0, 0, 1, 1, 1.08);
+      pAdd(b, gcyl(0.158, 0.2, 0.22, 16), hat, 0, 2.03, 0);
+      pAdd(b, gsph(0.158, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2), hat, 0, 2.14, 0, 0, 0, 0, 1, 0.35, 1);
+      pAdd(b, gcyl(0.11, 0.11, 0.012, 12), hatD, 0, 2.168, 0.01, 0, 0, 0, 1, 1, 0.45);
+      pAdd(b, gcyl(0.205, 0.209, 0.04, 16), band || 0x2a1a10, 0, 1.96, 0);
+      pAdd(b, gbox(0.04, 0.035, 0.012), 0xc8a848, 0, 1.96, 0.21);
+    }
+  }
+  pBake(b, g);
+  // Arme: Schulter, Oberarm, Ellbogen, Unterarm, Manschette, Hand mit Daumen
   for (const s of [-1, 1]) {
     const arm = new THREE.Group(); arm.position.set(s * 0.34, 1.54, 0); g.add(arm);
-    addMesh(arm, new THREE.SphereGeometry(0.085, 8, 6), shirt, 0, 0, 0, false);
-    addMesh(arm, cyl(0.068, 0.052, 0.56), shirt, 0, -0.28, 0);
-    addMesh(arm, new THREE.SphereGeometry(0.058, 8, 6), lam(skin), 0, -0.6, 0, false);
+    const a = PB();
+    pAdd(a, gsph(0.095, 12, 8), shirt, 0, 0, 0);
+    pAdd(a, gcyl(0.073, 0.059, 0.3, 12), shirt, 0, -0.15, 0);
+    pAdd(a, gsph(0.06, 8, 6), shirt, 0, -0.3, 0);
+    pAdd(a, gcyl(0.059, 0.048, 0.28, 12), shirt, 0, -0.44, 0);
+    pAdd(a, gcyl(0.052, 0.054, 0.05, 12), shade(shirt, 0.82), 0, -0.56, 0);
+    pAdd(a, gsph(0.05, 10, 8), skin, 0, -0.615, 0, 0, 0, 0, 1, 1.15, 0.85);
+    pAdd(a, gsph(0.022, 6, 5), skin, -s * 0.04, -0.6, 0.02);
+    pAdd(a, gbox(0.07, 0.05, 0.03), skinD, 0, -0.665, 0.01);
+    pBake(a, arm);
     arms.push(arm);
-  }
-  const head = addMesh(g, new THREE.SphereGeometry(0.135, 12, 10), lam(skin), 0, 1.79, 0.005); head.scale.set(1, 1.18, 1.08);
-  addMesh(g, new THREE.BoxGeometry(0.03, 0.02, 0.02), dark, -0.05, 1.82, 0.135, false);
-  addMesh(g, new THREE.BoxGeometry(0.03, 0.02, 0.02), dark, 0.05, 1.82, 0.135, false);
-  addMesh(g, new THREE.BoxGeometry(0.03, 0.05, 0.04), lam(skin), 0, 1.78, 0.145, false);
-  if (o.stache) addMesh(g, new THREE.BoxGeometry(0.11, 0.025, 0.03), lam(o.hair || 0x2a1a10), 0, 1.735, 0.14, false);
-  if (o.hair !== null) { m = addMesh(g, new THREE.SphereGeometry(0.14, 10, 8), lam(o.hair || 0x3a2818), 0, 1.84, -0.03, false); m.scale.set(1, 0.9, 1); }
-  if (o.scarf) addMesh(g, cyl(0.1, 0.12, 0.1), lam(o.scarf), 0, 1.66, 0.01, false);
-  if (o.mask) addMesh(g, new THREE.BoxGeometry(0.25, 0.11, 0.26), lam(o.mask), 0, 1.74, 0.01, false);
-  if (o.beard) { m = addMesh(g, new THREE.SphereGeometry(0.12, 10, 8), lam(o.hair || 0x2a1a10), 0, 1.7, 0.05, false); m.scale.set(1, 0.8, 0.8); }
-  if (o.poncho) { m = addMesh(g, cyl(0.2, 0.5, 0.58, 12), lam(o.poncho), 0, 1.35, 0); m.scale.z = 0.72; addMesh(g, cyl(0.505, 0.505, 0.06, 12), lam(o.poncho2 || 0xe8d8b0), 0, 1.1, 0, false).scale.z = 0.73; }
-  if (o.bandolier) { m = addMesh(g, new THREE.BoxGeometry(0.07, 0.72, 0.04), lam(0x3a2414), 0.02, 1.3, 0.2, false); m.rotation.z = 0.7; }
-  if (o.hat !== undefined && o.hat !== null) {
-    const hs = o.hatStyle || 'cowboy', hm = lam(o.hat);
-    if (hs === 'bowler') {
-      addMesh(g, cyl(0.24, 0.24, 0.025, 14), hm, 0, 1.94, 0);
-      m = addMesh(g, new THREE.SphereGeometry(0.17, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), hm, 0, 1.95, 0); m.scale.y = 1.2;
-      addMesh(g, cyl(0.172, 0.172, 0.035, 12), lam(o.band || 0x1a1a1a), 0, 1.97, 0, false);
-    } else if (hs === 'sombrero') {
-      addMesh(g, cyl(0.62, 0.6, 0.03, 18), hm, 0, 1.93, 0);
-      addMesh(g, cyl(0.1, 0.19, 0.3, 12), hm, 0, 2.08, 0);
-      addMesh(g, cyl(0.19, 0.2, 0.05, 12), lam(o.band || 0xa02020), 0, 1.97, 0, false);
-    } else if (hs === 'flat') {
-      addMesh(g, cyl(0.34, 0.34, 0.025, 14), hm, 0, 1.93, 0);
-      addMesh(g, cyl(0.18, 0.18, 0.13, 12), hm, 0, 2.0, 0);
-      addMesh(g, cyl(0.183, 0.183, 0.035, 12), lam(o.band || 0x2a1a10), 0, 1.955, 0, false);
-    } else if (hs === 'fur') {
-      m = addMesh(g, cyl(0.17, 0.18, 0.2, 10), hm, 0, 1.98, 0);
-      m = addMesh(g, new THREE.CylinderGeometry(0.035, 0.02, 0.4, 6), hm, 0, 1.9, -0.25, false); m.rotation.x = 0.9;
-    } else {
-      const brim = addMesh(g, cyl(0.36, 0.34, 0.03, 14), hm, 0, 1.93, 0); brim.rotation.z = 0.05;
-      addMesh(g, cyl(0.16, 0.2, 0.22, 12), hm, 0, 2.03, 0);
-      addMesh(g, cyl(0.203, 0.207, 0.04, 12), lam(o.band || 0x2a1a10), 0, 1.96, 0, false);
-    }
   }
   const hand = new THREE.Group(); hand.position.set(0, -0.6, 0.02); hand.rotation.x = Math.PI / 2; arms[1].add(hand);
   return { g, legs, arms, hand, held: undefined };
@@ -164,49 +270,91 @@ function setHeldWeapon(m, key) {
 // ---------- Vierbeiner (Pferd, Hirsch, Kuh, Wolf) ----------
 function makeQuad(o) {
   const g = new THREE.Group(); g.rotation.order = 'YXZ';
-  const body = lam(o.color), dark = lam(o.dark || 0x222222);
   const { bl, bw, bh, ll, lt = 0.16 } = o;
-  const r0 = bh / 2;
-  const trunkGeo = new THREE.CylinderGeometry(r0, r0 * 0.95, bl * 0.72, 12); trunkGeo.rotateX(Math.PI / 2);
-  let m = addMesh(g, trunkGeo, body, 0, ll + r0, 0); m.scale.x = bw / bh;
-  m = addMesh(g, new THREE.SphereGeometry(r0 * 1.02, 12, 10), body, 0, ll + r0, bl * 0.34); m.scale.x = bw / bh;
-  m = addMesh(g, new THREE.SphereGeometry(r0 * 0.98, 12, 10), body, 0, ll + r0, -bl * 0.34); m.scale.x = bw / bh;
+  const col = o.color, dk = o.dark || 0x222222, light = shade(col, 1.18), hoofC = shade(dk, 0.6);
+  const r0 = bh / 2, sx = bw / bh, by = ll + r0, isHorse = !!o.saddle;
+  const b = PB();
+  // Rumpf: Brust, Bauch, Hinterhand, Widerrist
+  pAdd(b, gcyl(r0, r0 * 0.95, bl * 0.72, 20), col, 0, by, 0, Math.PI / 2, 0, 0, sx, 1, 1);
+  pAdd(b, gsph(r0 * 1.03, 18, 12), col, 0, by + 0.01, bl * 0.34, 0, 0, 0, sx, 1.02, 1);
+  pAdd(b, gsph(r0 * 1.0, 18, 12), col, 0, by + 0.02, -bl * 0.34, 0, 0, 0, sx * 1.02, 1.02, 1.05);
+  pAdd(b, gsph(r0 * 0.55, 12, 8), col, 0, by + r0 * 0.72, bl * 0.2, 0, 0, 0, sx * 0.9, 0.7, 1.5);
+  pAdd(b, gsph(r0 * 0.9, 14, 10), light, 0, by - r0 * 0.18, 0, 0, 0, 0, sx * 0.8, 0.7, bl * 0.55 / r0);
+  // Hals
   const nl = o.nl, na = o.neckAngle === undefined ? 0.55 : o.neckAngle;
-  const nb = new V3(0, ll + bh * 0.85, bl / 2 - 0.1);
-  const neck = addMesh(g, new THREE.CylinderGeometry(bw * 0.2, bw * 0.3, nl, 8), body, nb.x, nb.y + nl / 2 * Math.cos(na), nb.z + nl / 2 * Math.sin(na));
-  neck.rotation.x = na;
-  const nt = new V3(0, nb.y + nl * Math.cos(na), nb.z + nl * Math.sin(na));
-  const head = addMesh(g, new THREE.CylinderGeometry(bw * 0.17, bw * 0.24, o.hl, 8), o.headDark ? dark : body, 0, nt.y - 0.03, nt.z + o.hl * 0.34);
-  head.rotation.x = Math.PI / 2 - 0.5; head.scale.x = 0.85;
-  addMesh(g, new THREE.BoxGeometry(bw * 0.3, bw * 0.28, o.hl * 0.28), dark, 0, nt.y - o.hl * 0.34, nt.z + o.hl * 0.66, false);
+  const nb = new V3(0, ll + bh * 0.85, bl / 2 - 0.1), ca = Math.cos(na), sa = Math.sin(na);
+  pAdd(b, gcyl(bw * 0.2, bw * 0.31, nl, 14), col, nb.x, nb.y + nl / 2 * ca, nb.z + nl / 2 * sa, na, 0, 0, 0.9, 1, 1);
+  const nt = new V3(0, nb.y + nl * ca, nb.z + nl * sa);
+  // Kopf: schräg nach vorne unten
+  const ha = o.headAngle === undefined ? (isHorse ? 0.62 : 0.5) : o.headAngle, dir = new V3(0, -Math.sin(ha), Math.cos(ha)).normalize();
+  const hl = o.hl, hc = new V3().copy(nt).addScaledVector(dir, hl * 0.5), hm = new V3().copy(nt).addScaledVector(dir, hl);
+  pAdd(b, gcyl(bw * 0.25, bw * 0.15, hl, 12), o.headDark ? dk : col, hc.x, hc.y, hc.z, Math.PI / 2 + ha, 0, 0, 0.82, 1, 1);
+  pAdd(b, gsph(bw * 0.24, 12, 10), o.headDark ? dk : col, nt.x, nt.y - 0.02, nt.z + 0.0, 0, 0, 0, 0.85, 1, 1.05);
+  pAdd(b, gsph(bw * 0.17, 12, 10), dk, hm.x, hm.y, hm.z + 0.005, 0, 0, 0, 0.85, 0.9, 1.05);
   for (const s of [-1, 1]) {
-    addMesh(g, new THREE.ConeGeometry(0.045, 0.16, 5), body, s * bw * 0.15, nt.y + bw * 0.24, nt.z + 0.02, false);
-    addMesh(g, new THREE.SphereGeometry(0.03, 5, 4), lam(0x0a0a0a), s * bw * 0.2, nt.y - 0.02, nt.z + o.hl * 0.34, false);
+    pAdd(b, gsph(0.012, 5, 4), 0x050505, s * bw * 0.1, hm.y + 0.02, hm.z + bw * 0.12);
+    pAdd(b, gsph(0.03, 8, 6), 0x0a0808, s * bw * 0.2, nt.y + 0.02, nt.z + hl * 0.2 * Math.cos(ha) + 0.02, 0, 0, 0, 0.6, 1, 1);
+    pAdd(b, gsph(0.009, 5, 4), 0xffffff, s * bw * 0.21, nt.y + 0.03, nt.z + hl * 0.2 * Math.cos(ha) + 0.035);
+    pAdd(b, gcone(0.05, o.antlers ? 0.17 : 0.15, 6), col, s * bw * 0.16, nt.y + bw * 0.27, nt.z - 0.03, 0.15, 0, -s * 0.28);
+    pAdd(b, gcone(0.028, 0.1, 5), shade(dk, 0.8), s * bw * 0.16, nt.y + bw * 0.26, nt.z - 0.015, 0.15, 0, -s * 0.28);
   }
+  if (o.blaze) pAdd(b, gbox(bw * 0.07, hl * 0.7, 0.01), 0xf0ead8, 0, hc.y + 0.05, hc.z + 0.05, Math.PI / 2 + ha);
+  // Mähne und Schopf
   if (o.mane) {
-    const mn = addMesh(g, new THREE.BoxGeometry(0.06, nl * 0.95, 0.14), dark, 0, nb.y + nl / 2 * Math.cos(na) + 0.1, nb.z + nl / 2 * Math.sin(na) - bw * 0.22, false); mn.rotation.x = na;
+    for (let i = 0; i <= 9; i++) {
+      const t = i / 9, px = nb.z + nl * t * sa - ca * bw * 0.3 * 0.85, py = nb.y + nl * t * ca + sa * bw * 0.3 * 0.85;
+      pAdd(b, gsph(0.07, 8, 6), dk, 0, py, px, 0, 0, 0, 0.55, 1.7, 1.1);
+    }
+    pAdd(b, gsph(0.06, 8, 6), dk, 0, nt.y + bw * 0.2, nt.z + 0.06, 0, 0, 0, 0.6, 1.1, 1.6);
   }
   if (o.antlers) for (const s of [-1, 1]) {
-    const a = addMesh(g, new THREE.CylinderGeometry(0.015, 0.03, 0.7, 4), lam(0xd8cdb0), s * 0.12, nt.y + 0.4, nt.z + 0.08, false); a.rotation.z = -s * 0.45;
-    const b = addMesh(g, new THREE.CylinderGeometry(0.012, 0.02, 0.4, 4), lam(0xd8cdb0), s * 0.26, nt.y + 0.55, nt.z + 0.08, false); b.rotation.z = s * 0.3;
+    const aC = 0xd8cdb0;
+    pAdd(b, gcyl(0.015, 0.03, 0.7, 5), aC, s * 0.12, nt.y + 0.4, nt.z + 0.0, -0.15, 0, -s * 0.45);
+    pAdd(b, gcyl(0.012, 0.02, 0.4, 5), aC, s * 0.27, nt.y + 0.58, nt.z - 0.02, 0, 0, s * 0.3);
+    for (const [h, l] of [[0.25, 0.22], [0.45, 0.2]]) pAdd(b, gcyl(0.008, 0.016, l, 4), aC, s * (0.08 + h * 0.5), nt.y + 0.18 + h * 0.9, nt.z + 0.08, 0.7, 0, -s * 0.2);
   }
-  const tl = o.tl || 0.6;
-  const tail = addMesh(g, new THREE.CylinderGeometry(0.06, 0.02, tl, 6), o.tailDark ? dark : body, 0, ll + bh * 0.8 - tl / 2 * 0.8, -bl / 2 - 0.02, false);
-  tail.rotation.x = -0.4;
+  if (o.patches) {
+    for (let i = 0; i < 5; i++) pAdd(b, gsph(r0 * 0.7, 8, 6), dk, rand(-0.3, 0.3), by + rand(-0.1, 0.25), rand(-bl * 0.28, bl * 0.28), 0, 0, 0, 1, 0.9, 1.2);
+    for (const s of [-1, 1]) pAdd(b, gcone(0.035, 0.18, 6), 0xe8e0c0, s * bw * 0.22, nt.y + bw * 0.28, nt.z + 0.0, 0, 0, -s * 1.0);
+    pAdd(b, gsph(r0 * 0.5, 10, 8), 0xe0a0a0, 0, ll + 0.12, -bl * 0.3, 0, 0, 0, 0.9, 0.7, 1);
+  }
+  // Schwanz: hängt nach hinten unten
+  const tl = o.tl || 0.6, tb = new V3(0, ll + bh * 0.86, -bl / 2 - 0.02), tc = o.tailDark ? dk : col;
+  pAdd(b, gsph(0.065, 8, 6), col, tb.x, tb.y, tb.z);
+  pAdd(b, gcyl(0.085, 0.045, tl, 8), tc, 0, tb.y - tl / 2 * 0.94, tb.z - tl / 2 * 0.34, 0.35, 0, 0);
+  if (isHorse || o.tailDark) pAdd(b, gsph(0.09, 8, 6), tc, 0, tb.y - tl * 0.78, tb.z - tl * 0.32, 0.35, 0, 0, 1, tl * 2.2, 1.1);
+  // Sattel, Zaumzeug
+  if (isHorse) {
+    const sy = ll + bh;
+    pAdd(b, gbox(bw * 1.1, 0.045, 0.74), 0x8a2a22, 0, sy - 0.005, -0.05);
+    pAdd(b, gbox(bw * 0.9, 0.05, 0.5), 0x5b3a22, 0, sy + 0.04, -0.08);
+    pAdd(b, gbox(bw * 0.8, 0.07, 0.4), 0x6b4428, 0, sy + 0.09, -0.08);
+    pAdd(b, gbox(bw * 0.78, 0.13, 0.07), 0x5b3a22, 0, sy + 0.14, -0.33);
+    pAdd(b, gcyl(0.03, 0.045, 0.15, 8), 0x3a2418, 0, sy + 0.18, 0.18);
+    pAdd(b, gsph(0.045, 8, 6), 0x3a2418, 0, sy + 0.27, 0.18);
+    pAdd(b, gbox(bw * 1.04, 0.05, 0.06), 0x3a2418, 0, ll + bh * 0.42, 0.12);
+    pAdd(b, gbox(bw * 1.05, 0.2, 0.04), 0x3a2418, 0, ll + bh * 0.6, 0.12);
+    for (const s of [-1, 1]) {
+      pAdd(b, gbox(0.025, 0.34, 0.05), 0x3a2418, s * (bw * 0.5 + 0.04), sy - 0.14, -0.04);
+      pAdd(b, gtor(0.06, 0.009, 4, 10), 0x9a9a9a, s * (bw * 0.5 + 0.04), sy - 0.34, -0.04, 0, Math.PI / 2, 0);
+    }
+    pAdd(b, gbox(0.012, 0.012, 0.9), 0x2a1c14, bw * 0.12, ll + bh + 0.04, 0.6, 0.35, 0, 0);
+  }
+  pBake(b, g, [ll * 0.3, ll + bh, 0.72]);
+  // Beine: Oberschenkel, Gelenk, Röhrbein, Fesselgelenk, Huf
   const legs = [];
-  for (const [sx, sz] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) {
-    const leg = new THREE.Group(); leg.position.set(sx * bw * 0.34, ll + 0.05, sz * bl * 0.34); g.add(leg);
-    addMesh(leg, new THREE.CylinderGeometry(lt * 0.9, lt * 0.55, ll * 0.55, 7), body, 0, -ll * 0.25, 0);
-    addMesh(leg, new THREE.CylinderGeometry(lt * 0.5, lt * 0.42, ll * 0.5, 7), body, 0, -ll * 0.7, 0);
-    addMesh(leg, new THREE.CylinderGeometry(lt * 0.52, lt * 0.62, ll * 0.14, 7), dark, 0, -ll * 0.98, 0.01, false);
+  for (const [sx2, sz] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) {
+    const leg = new THREE.Group(); leg.position.set(sx2 * bw * 0.34, ll + 0.05, sz * bl * 0.34); g.add(leg);
+    const l = PB(), sock = isHorse && o.dark === HORSE_COLORS[2].d ? 0xf0ead8 : col;
+    pAdd(l, gcyl(lt * 0.95, lt * 0.6, ll * 0.52, 10), col, 0, -ll * 0.25, 0);
+    pAdd(l, gsph(lt * 0.58, 8, 6), col, 0, -ll * 0.5, 0);
+    pAdd(l, gcyl(lt * 0.46, lt * 0.4, ll * 0.42, 8), shade(col, 0.92), 0, -ll * 0.72, 0);
+    pAdd(l, gsph(lt * 0.46, 8, 6), shade(col, 0.9), 0, -ll * 0.92, 0.01);
+    pAdd(l, gcyl(lt * 0.42, lt * 0.46, ll * 0.1, 8), sock, 0, -ll * 0.95, 0.01);
+    pAdd(l, gcyl(lt * 0.52, lt * 0.64, ll * 0.12, 8), hoofC, 0, -ll * 0.99, 0.015);
+    if (sz < 0) pAdd(l, gsph(lt * 0.7, 8, 6), col, 0, -ll * 0.14, -0.02, 0, 0, 0, 1, 1.6, 1.1);
+    pBake(l, leg, [-ll, 0, 0.8]);
     legs.push(leg);
-  }
-  if (o.patches) for (let i = 0; i < 4; i++) { const pm = addMesh(g, new THREE.SphereGeometry(r0 * 0.7, 6, 5), lam(0x222222), rand(-0.3, 0.3), ll + r0 + rand(-0.1, 0.2), rand(-bl * 0.25, bl * 0.25), false); pm.scale.set(1, 0.9, 1.2); }
-  if (o.saddle) {
-    addMesh(g, new THREE.BoxGeometry(bw * 1.08, 0.05, 0.7), lam(0x8a2a22), 0, ll + bh + 0.0, -0.05, false);
-    addMesh(g, new THREE.BoxGeometry(bw * 0.85, 0.11, 0.5), lam(0x5b3a22), 0, ll + bh + 0.07, -0.08, false);
-    addMesh(g, new THREE.BoxGeometry(0.1, 0.16, 0.1), lam(0x3a2418), 0, ll + bh + 0.18, 0.15, false);
-    addMesh(g, new THREE.BoxGeometry(bw * 0.9, 0.05, 0.05), lam(0x3a2418), 0, ll + bh * 0.4, 0.15, false);
   }
   return { g, legs };
 }

@@ -5,7 +5,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 2500);
 camera.rotation.order = 'YXZ';
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -142,10 +142,12 @@ const skyMat = new THREE.ShaderMaterial({
   vertexShader: 'varying vec3 vP; void main(){ vP=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
   fragmentShader: `varying vec3 vP; uniform vec3 top; uniform vec3 hor; uniform vec3 sunDir; uniform vec3 sunCol; uniform float sunAmt;
     void main(){ vec3 d=normalize(vP); float h=clamp(d.y,0.0,1.0);
-      vec3 c=mix(hor,top,pow(h,0.55));
-      if(d.y<0.0) c=hor;
+      vec3 c=mix(hor,top,pow(h,0.5));
+      c=mix(c,hor*1.06,exp(-h*7.0)*0.4);
+      if(d.y<0.0) c=hor*mix(1.0,0.92,clamp(-d.y*4.0,0.0,1.0));
       float s=max(dot(d,normalize(sunDir)),0.0);
-      c+=sunCol*(pow(s,600.0)*2.0+pow(s,8.0)*0.25)*sunAmt;
+      c+=sunCol*(pow(s,900.0)*3.0+pow(s,64.0)*0.35+pow(s,7.0)*0.2)*sunAmt;
+      c+=sunCol*pow(s,3.0)*exp(-h*5.0)*0.14*sunAmt;
       gl_FragColor=vec4(c,1.0); }`,
 });
 const skyDome = new THREE.Mesh(new THREE.SphereGeometry(1200, 32, 16), skyMat);
@@ -187,7 +189,7 @@ sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.camera.left = -55; sun.shadow.camera.right = 55; sun.shadow.camera.top = 55; sun.shadow.camera.bottom = -55;
 sun.shadow.camera.near = 1; sun.shadow.camera.far = 260;
-sun.shadow.bias = -0.0006;
+sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.04;
 scene.add(sun); scene.add(sun.target);
 
 let nightFactor = 0, daylight = 1, gameHours = 8.5;
@@ -202,6 +204,26 @@ const sunGlow = (() => {
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, fog: false }));
   sp.scale.set(420, 420, 1); sp.renderOrder = -5; sp.frustumCulled = false; scene.add(sp); return sp;
 })();
+// Staubpartikel in der Luft (nur bei Sonne)
+const DUST_N = 160;
+const dustGeo = new THREE.BufferGeometry();
+dustGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(DUST_N * 3), 3));
+const dustPts = new THREE.Points(dustGeo, new THREE.PointsMaterial({ color: 0xffe8c0, size: 1.8, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false }));
+dustPts.frustumCulled = false; scene.add(dustPts);
+{ const a = dustGeo.attributes.position.array; for (let i = 0; i < DUST_N; i++) { a[i * 3] = rand(-18, 18); a[i * 3 + 1] = rand(-3, 9); a[i * 3 + 2] = rand(-18, 18); } }
+function updateDust(dt, t) {
+  const op = daylight * (1 - rain) * 0.3;
+  dustPts.visible = op > 0.02; if (!dustPts.visible) return;
+  dustPts.material.opacity = op;
+  const a = dustGeo.attributes.position.array;
+  for (let i = 0; i < DUST_N; i++) {
+    const k = i * 3;
+    a[k] += (0.35 + Math.sin(t * 0.7 + i) * 0.25) * dt; a[k + 1] += Math.sin(t * 0.5 + i * 1.7) * 0.12 * dt; a[k + 2] += Math.cos(t * 0.6 + i * 0.9) * 0.2 * dt;
+    if (a[k] > 18) a[k] -= 36; if (a[k + 1] > 9) a[k + 1] -= 12; else if (a[k + 1] < -3) a[k + 1] += 12; if (a[k + 2] > 18) a[k + 2] -= 36; else if (a[k + 2] < -18) a[k + 2] += 36;
+  }
+  dustGeo.attributes.position.needsUpdate = true;
+  dustPts.position.copy(camera.position);
+}
 // Regen
 const RAIN_N = 2200;
 const rainGeo = new THREE.BufferGeometry();
@@ -210,7 +232,9 @@ const rainLines = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ 
 rainLines.frustumCulled = false; rainLines.visible = false; scene.add(rainLines);
 const rainPos = rainGeo.attributes.position.array;
 for (let i = 0; i < RAIN_N; i++) { const b = i * 6; rainPos[b] = rand(-28, 28); rainPos[b + 1] = rand(-4, 22); rainPos[b + 2] = rand(-28, 28); }
+let _dustT = 0;
 function updateWeather(dt) {
+  _dustT += dt; updateDust(dt, _dustT);
   weatherT -= dt;
   if (weatherT <= 0) { rainTarget = rainTarget > 0 ? 0 : (Math.random() < 0.5 ? 1 : 0); weatherT = rand(120, 260); if (rainTarget && game.started) toast('Dunkle Wolken ziehen auf…', 3000); }
   rain += (rainTarget - rain) * Math.min(1, dt * 0.25);
@@ -274,6 +298,7 @@ function updateEnv(hours, focus) {
 // ---------- Terrain ----------
 const GRIT = makeGritTexture();
 const WOOD = makeWoodTexture();
+GRIT.anisotropy = WOOD.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 let terrainMesh, waterMesh;
 function terrainColor(x, z, h, ny, out) {
   const m = moist(x, z), n = noise2(x * 0.08, z * 0.08);
