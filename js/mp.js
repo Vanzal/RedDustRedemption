@@ -3,17 +3,33 @@
 // zwischen Clients (Stern-Topologie), verwaltet die Spielerliste, Einstellungen (NPCs, PvP), Uhrzeit, Wetter und Kicks.
 (() => {
   const PREFIX = 'dustred2-', PROTO = 2, MAX_PLAYERS = 8, SEND_HZ = 15, TIMEOUT = 15;
+  // STUN für direkte Verbindungen. TURN-Relays (für strikte NATs) kommen aus js/turn-config.js.
+  // ?relay=1 erzwingt das Relay zum Testen.
   const PEER_OPTS = {
     debug: 1,
     config: {
       iceServers: [
         { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
         { urls: 'stun:stun.cloudflare.com:3478' },
-        // Öffentliches TURN-Relay als Rückfall für strikte NATs (Mobilfunk, Firmennetze)
-        { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'], username: 'openrelayproject', credential: 'openrelayproject' },
       ],
+      sdpSemantics: 'unified-plan',
     },
   };
+  if (new URLSearchParams(location.search).get('relay') === '1') PEER_OPTS.config.iceTransportPolicy = 'relay';
+  let hasTurn = false;
+  async function loadTurn() {
+    const tc = window.TURN_CONFIG || {};
+    const add = (list) => { if (Array.isArray(list) && list.length) { PEER_OPTS.config.iceServers.push(...list); hasTurn = true; } };
+    add(tc.servers);
+    if (tc.credentialsUrl) {
+      try {
+        const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 5000);
+        const r = await fetch(tc.credentialsUrl, { signal: ctl.signal }); clearTimeout(t);
+        if (r.ok) add(await r.json());
+      } catch (e) { console.warn('TURN-Zugangsdaten nicht ladbar', e); }
+    }
+  }
+  const JOIN_ATTEMPT_MS = 12000, JOIN_ATTEMPTS = 3;
   const COLORS = [0x9a3a2a, 0x2a5a8a, 0x3a7a3a, 0x7a4a9a, 0x9a7a2a, 0x2a7a7a];
   const remotes = new Map(); // id -> Modell + Zustand eines Mitspielers
   const roster = new Map(); // id -> { id, n, o } (vom Host gepflegt, inkl. Host selbst)
@@ -150,6 +166,7 @@
       case 'l': dropRemote(m.id); break;
       // Nur vom Host:
       case 'wl':
+        if (active) return;
         clearTimeout(joinTimer);
         myId = m.id; hostId = m.host; active = true;
         roster.clear(); for (const p of m.list || []) roster.set(p.id, p);
@@ -198,9 +215,10 @@
     toast(`${had.n} hat den Raum verlassen`, 2500);
   }
   function attachHost(c) {
-    c.on('data', (m) => hostReceive(m, c.peer));
-    c.on('close', () => dropClient(c.peer));
-    c.on('error', () => dropClient(c.peer));
+    // Nur die aktuelle Verbindung eines Spielers zählt (ein Client kann nach Hängern neu verbinden)
+    c.on('data', (m) => { if (conns.get(c.peer) === c) hostReceive(m, c.peer); });
+    c.on('close', () => { if (conns.get(c.peer) === c) dropClient(c.peer); });
+    c.on('error', () => { if (conns.get(c.peer) === c) dropClient(c.peer); });
   }
   function leave(reason) {
     if (left) return;
@@ -228,7 +246,9 @@
     peer.on('connection', (c) => {
       c.on('open', () => {
         if (kicked.has(c.peer)) { sendTo(c, { t: 'kick', reason: 'Du wurdest aus diesem Raum geworfen' }); setTimeout(() => c.close(), 400); return; }
+        const old = conns.get(c.peer);
         conns.set(c.peer, c); lastSeen.set(c.peer, performance.now()); attachHost(c);
+        if (old && old !== c) try { old.close(); } catch (e) { /* egal */ }
       });
     });
     peer.on('disconnected', () => { if (!left) setTimeout(() => { if (!left && peer.disconnected && !peer.destroyed) peer.reconnect(); }, 2000); });
@@ -240,24 +260,31 @@
   }
   function startClient(code) {
     room = code.trim().toUpperCase();
-    status(`Verbinde mit Raum ${room}…`); toast(`Verbinde mit Raum ${room}…`, 20000);
+    const say = (s, ms = 4000) => { status(s); toast(s, ms); };
+    say(`Verbinde mit Vermittlungsserver…`);
     peer = new Peer(PEER_OPTS);
     const fail = (why) => { if (!active) leave(why); };
-    joinTimer = setTimeout(() => fail(`Keine Verbindung zu Raum ${room}. Firewall/NAT blockiert oder Raum geschlossen. Du spielst alleine.`), 40000);
-    let tries = 0;
-    const connect = () => {
+    let attempt = 0;
+    // Verbindungsaufbau zum Host; hängt ein Versuch (ICE/NAT), neu versuchen
+    const tryConnect = () => {
       if (left || active) return;
-      try { if (hostConn) hostConn.close(); } catch (e) { /* egal */ }
-      hostConn = peer.connect(PREFIX + room, { reliable: true, serialization: 'json' });
-      hostConn.on('open', () => { lastSeen.set('host', performance.now()); sendTo(hostConn, { t: 'hi', v: PROTO, n: myName, o: player.outfit | 0 }); });
-      hostConn.on('data', (m) => { lastSeen.set('host', performance.now()); if (m && typeof m === 'object') handle(m); });
-      hostConn.on('close', () => { if (!left) leave(active ? 'Der Host hat den Raum geschlossen' : `Verbindung zu Raum ${room} fehlgeschlagen`); });
-      hostConn.on('error', () => fail(`Verbindung zu Raum ${room} fehlgeschlagen`));
+      if (attempt++ >= JOIN_ATTEMPTS) { fail(hasTurn ? `Keine Verbindung zu Raum ${room} möglich. Du spielst alleine.` : `Keine direkte Verbindung zu Raum ${room} möglich – euer Netzwerk braucht ein TURN-Relay (siehe js/turn-config.js). Du spielst alleine.`); return; }
+      if (hostConn) { const old = hostConn; hostConn = null; try { old.close(); } catch (e) { /* egal */ } }
+      say(`Verbinde mit Raum ${room}… (Versuch ${attempt}/${JOIN_ATTEMPTS})`, JOIN_ATTEMPT_MS);
+      const c = peer.connect(PREFIX + room, { reliable: true, serialization: 'json' });
+      hostConn = c;
+      clearTimeout(joinTimer); joinTimer = setTimeout(tryConnect, JOIN_ATTEMPT_MS);
+      c.on('open', () => { if (hostConn !== c) return; lastSeen.set('host', performance.now()); status(`Verbunden – warte auf Host…`); sendTo(c, { t: 'hi', v: PROTO, n: myName, o: player.outfit | 0 }); });
+      c.on('data', (m) => { if (hostConn !== c) return; lastSeen.set('host', performance.now()); if (m && typeof m === 'object') handle(m); });
+      c.on('close', () => { if (hostConn === c && active && !left) leave('Der Host hat den Raum geschlossen'); });
+      c.on('error', () => { if (hostConn === c && !active) tryConnect(); });
     };
-    peer.on('open', (id) => { myId = id; connect(); });
+    joinTimer = setTimeout(() => fail('Vermittlungsserver nicht erreichbar. Du spielst alleine.'), 15000);
+    peer.on('open', (id) => { myId = id; tryConnect(); });
+    let tries = 0;
     peer.on('error', (e) => {
       // Raum evtl. noch nicht beim Vermittlungsserver registriert: ein paar Mal erneut versuchen
-      if (e.type === 'peer-unavailable' && !active && tries++ < 3) { status(`Suche Raum ${room}… (${tries})`); setTimeout(connect, 2000); return; }
+      if (e.type === 'peer-unavailable' && !active && tries++ < 3) { status(`Suche Raum ${room}… (${tries})`); clearTimeout(joinTimer); attempt = Math.max(0, attempt - 1); setTimeout(tryConnect, 2000); return; }
       fail(e.type === 'peer-unavailable' ? `Raum ${room} nicht gefunden – du spielst alleine` : `Netzwerkfehler (${e.type}) – du spielst alleine`);
     });
     peer.on('disconnected', () => { if (!left && !active) setTimeout(() => { if (!left && peer.disconnected && !peer.destroyed) peer.reconnect(); }, 2000); });
@@ -266,7 +293,8 @@
     myName = cleanName(name); store('dr-name', myName);
     if (solo) { status('Solo-Modus'); return; }
     if (typeof Peer === 'undefined') { status('Mehrspieler nicht verfügbar (PeerJS blockiert). Solo-Modus.'); toast('Mehrspieler nicht verfügbar – Solo-Modus', 4000); return; }
-    if (code && code.trim()) startClient(code); else startHost();
+    status('Lade Netzwerk…');
+    loadTurn().then(() => { if (code && code.trim()) startClient(code); else startHost(); });
   }
 
   // ---------- Takt: Zustand senden, Timeouts prüfen (läuft auch bei verstecktem Tab) ----------
@@ -351,7 +379,8 @@
 
   addEventListener('beforeunload', () => { if (!active) return; if (isHost) for (const c of conns.values()) sendTo(c, { t: 'kick', reason: 'Der Host hat den Raum geschlossen' }); else sendAll({ t: 'l', id: myId }); });
   const $el = (id) => document.getElementById(id);
-  $el('btnPlay').addEventListener('click', () => { if (!peer && !left) start($el('mpName').value, $el('mpRoom').value, game.mode === 'solo'); setTimeout(updateHud, 0); });
+  let startedOnce = false;
+  $el('btnPlay').addEventListener('click', () => { if (!startedOnce) { startedOnce = true; start($el('mpName').value, $el('mpRoom').value, game.mode === 'solo'); } setTimeout(updateHud, 0); });
   for (const id of ['mpName', 'mpRoom']) $el(id).addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') $el('btnPlay').click(); });
   const saved = store('dr-name'); if (saved) $el('mpName').value = saved;
   // Raumcode per Link: ?room=ABCD

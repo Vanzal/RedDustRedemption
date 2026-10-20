@@ -52,3 +52,4 @@ Peer-to-peer über WebRTC (PeerJS). Raumcode leer lassen = neuen Raum eröffnen,
 - Der Raumbesitzer (Host) öffnet mit **O** das Admin-Menü: Spieler kicken, PvP an/aus.
 - Uhrzeit und Wetter kommen vom Host. Mitspieler sieht man mit Figur, Waffe, Pferd und auf der Minikarte.
 - Verlässt der Host das Spiel oder wird man gekickt, geht es im Einzelspieler weiter.
+- Verbindung: direkt über STUN, das klappt in vielen Heimnetzen. Hinter strengen NATs (Mobilfunk, Firmen- oder Schulnetz) braucht es ein TURN-Relay. Zugangsdaten in `js/turn-config.js` eintragen (z. B. kostenloser Plan bei Metered.ca). Mit `?relay=1` in der URL lässt sich das Relay testen.
