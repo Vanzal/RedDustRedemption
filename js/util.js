@@ -66,22 +66,47 @@ function MX(x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1)
   _q.setFromEuler(_e);
   return new THREE.Matrix4().compose(new V3(x, y, z), _q.clone(), new V3(sx, sy, sz));
 }
-// Mehrere Teile (mit Farbe) zu einer Geometrie mit Vertexfarben verschmelzen
-function mergeParts(parts) {
-  const pos = [], nor = [], col = [];
-  for (const p of parts) {
-    const g = p.geo.index ? p.geo.toNonIndexed() : p.geo.clone();
-    if (p.m) g.applyMatrix4(p.m);
-    const c = new THREE.Color(p.color !== undefined ? p.color : 0xffffff);
-    const pa = g.attributes.position.array, na = g.attributes.normal.array;
-    for (let i = 0; i < pa.length; i++) { pos.push(pa[i]); nor.push(na[i]); }
-    for (let i = 0; i < pa.length / 3; i++) col.push(c.r, c.g, c.b);
-  }
+// Mehrere Teile (mit Farbe) zu einer Geometrie mit Vertexfarben verschmelzen; uv = Texturkoordinaten übernehmen
+function mergeParts(parts, uv = false) {
+  const geos = parts.map((p) => { const g = p.geo.index ? p.geo.toNonIndexed() : p.geo.clone(); if (p.m) g.applyMatrix4(p.m); return g; });
+  const n = geos.reduce((s, g) => s + g.attributes.position.count, 0);
+  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3), uvs = uv ? new Float32Array(n * 2) : null;
+  const c = new THREE.Color();
+  let o = 0;
+  geos.forEach((g, i) => {
+    const cnt = g.attributes.position.count;
+    pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3);
+    if (uv) uvs.set(g.attributes.uv.array, o * 2);
+    c.set(parts[i].color !== undefined ? parts[i].color : 0xffffff);
+    for (let k = o * 3, e = (o + cnt) * 3; k < e; k += 3) { col[k] = c.r; col[k + 1] = c.g; col[k + 2] = c.b; }
+    o += cnt;
+  });
   const out = new THREE.BufferGeometry();
-  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
-  out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  out.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  if (uv) out.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
   return out;
+}
+// Starre Lambert-Teile direkt unter einem Knoten zu einem Mesh pro Textur verschmelzen
+// (ein Draw Call statt vieler); Untergruppen (Gelenke, Hand, Rotor) bleiben erhalten
+const _bakeMats = new Map();
+function bakeParts(node) {
+  const byMap = new Map();
+  for (const c of node.children) {
+    const mat = c.material;
+    if (!c.isMesh || c.isInstancedMesh || c.children.length || !mat.isMeshLambertMaterial || mat.transparent || mat.vertexColors) continue;
+    if (mat.map && !c.geometry.attributes.uv) continue;
+    (byMap.get(mat.map) || byMap.set(mat.map, []).get(mat.map)).push(c);
+  }
+  for (const [map, meshes] of byMap) {
+    if (meshes.length < 2) continue;
+    const parts = meshes.map((c) => { c.updateMatrix(); node.remove(c); return { geo: c.geometry, m: c.matrix, color: c.material.color.getHex() }; });
+    const mat = _bakeMats.get(map) || _bakeMats.set(map, new THREE.MeshLambertMaterial({ vertexColors: true, map })).get(map);
+    const m = new THREE.Mesh(mergeParts(parts, !!map), mat);
+    m.castShadow = m.receiveShadow = meshes.some((c) => c.castShadow);
+    node.add(m);
+  }
 }
 // Box mit UVs, die zur Größe passen (Holzplanken skalieren korrekt)
 function boxGeo(w, h, d, tile = 3) {

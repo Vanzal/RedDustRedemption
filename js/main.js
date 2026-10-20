@@ -869,6 +869,7 @@ function frame(now) {
     updateGrassPatch(0, 10);
     updateEntities(rdt * 0.5, titleT); updateFX(rdt);
     for (const u of updatables) u(rdt, titleT);
+    cullCharacters();
     renderer.render(scene, camera);
     return;
   }
@@ -926,6 +927,7 @@ function frame(now) {
   updateHUD(rdt);
   if (frameN % 2 === 0) drawMinimap();
   if ($('bigmap').style.display === 'flex' && frameN % 6 === 0) drawBigMap();
+  cullCharacters();
   renderer.render(scene, camera);
 }
 

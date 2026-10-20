@@ -776,6 +776,10 @@ function buildWorld() {
   buildTown();
   CAMPS.forEach(buildCamp);
   buildHomestead();
+  // Gebäude/Requisiten bestehen aus vielen starren Teilen → je Gruppe zu wenigen Meshes verschmelzen
+  const groups = [];
+  for (const o of scene.children) if (o.isGroup) o.traverse((n) => { if (n.isGroup) groups.push(n); });
+  groups.forEach(bakeParts);
   buildTumbleweeds();
   initGrassPatch();
 }

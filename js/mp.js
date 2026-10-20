@@ -3,6 +3,9 @@
 // zwischen Clients (Stern-Topologie), verwaltet die Spielerliste, Einstellungen (NPCs, PvP), Uhrzeit, Wetter und Kicks.
 (() => {
   const PREFIX = 'dustred2-', PROTO = 2, MAX_PLAYERS = 8, SEND_HZ = 15, TIMEOUT = 15;
+  // Mitspieler werden mit dieser Verzögerung zwischen zwei empfangenen Zuständen interpoliert
+  // (~1,7 Pakete Puffer gegen Netzwerk-Jitter); fehlt Nachschub, wird kurz extrapoliert
+  const INTERP_MS = 110, EXTRAP_MS = 150, SNAP_DIST = 25;
   // STUN für direkte Verbindungen. TURN-Relays (für strikte NATs) kommen aus js/turn-config.js.
   // ?relay=1 erzwingt das Relay zum Testen.
   const PEER_OPTS = {
@@ -75,7 +78,7 @@
     let r = remotes.get(id);
     if (r) return r;
     const ro = roster.get(id);
-    r = { id, name: cleanName(ro ? ro.n : m.n), outfit: ro ? ro.o : (m.o | 0), model: null, horse: null, x: m.x, y: m.y, z: m.z, yaw: m.yaw, tx: m.x, ty: m.y, tz: m.z, tyaw: m.yaw, alive: true, aim: false, pitch: 0, weapon: 'rev', mounted: false, hs: 0, sp: 0, phase: 0, hphase: 0, deadT: 0 };
+    r = { id, name: cleanName(ro ? ro.n : m.n), outfit: ro ? ro.o : (m.o | 0), model: null, horse: null, x: m.x, y: m.y, z: m.z, yaw: m.yaw, buf: [], off: undefined, alive: true, aim: false, pitch: 0, weapon: 'rev', mounted: false, hs: 0, sp: 0, phase: 0, hphase: 0, deadT: 0 };
     buildModel(r);
     remotes.set(id, r);
     return r;
@@ -91,6 +94,16 @@
       scene.add(r.horse.g);
     }
     return r.horse;
+  }
+  // Zustand eines Mitspielers zur Zeit t (Uhr des Absenders) aus dem Puffer interpolieren
+  function sampleRemote(r, t) {
+    const b = r.buf;
+    while (b.length > 2 && b[1].ts <= t) b.shift();
+    const a = b[0], c = b[1];
+    if (!c) { r.x = a.x; r.y = a.y; r.z = a.z; r.yaw = a.yaw; return; }
+    // t liegt hinter dem neuesten Zustand: aus den letzten beiden kurz weiterrechnen, dann stehen bleiben
+    const f = clamp((t - a.ts) / (c.ts - a.ts), 0, 1 + EXTRAP_MS / (c.ts - a.ts));
+    r.x = lerp(a.x, c.x, f); r.y = lerp(a.y, c.y, f); r.z = lerp(a.z, c.z, f); r.yaw = lerpAngle(a.yaw, c.yaw, Math.min(f, 1));
   }
 
   // ---------- Versand ----------
@@ -135,8 +148,16 @@
         if (m.id === myId) return;
         const r = getRemote(m.id, m);
         if ((m.o | 0) !== r.outfit && OUTFITS[m.o | 0]) { r.outfit = m.o | 0; buildModel(r); }
-        if (!remotes.get(m.id).seen) { r.x = m.x; r.y = m.y; r.z = m.z; r.yaw = m.yaw; r.seen = true; }
-        r.tx = m.x; r.ty = m.y; r.tz = m.z; r.tyaw = m.yaw; r.pitch = m.p || 0; r.aim = !!m.aim; r.weapon = WEAPONS[m.w] ? m.w : 'rev'; r.mounted = !!m.m; r.hs = m.hs || 0; r.sp = m.sp || 0;
+        // Absenderzeit (ts) statt Empfangszeit: Netzwerk-Jitter verzerrt die Bewegung nicht.
+        // off ≈ Uhrenabstand + kleinste Laufzeit; steigt langsam nach, falls die Uhren driften
+        const now = performance.now(), ts = Number.isFinite(m.ts) ? m.ts : now, off = now - ts;
+        r.off = r.off === undefined ? off : Math.min(off, r.off + 0.2);
+        const b = r.buf, last = b[b.length - 1];
+        if (last && ts <= last.ts) break; // veraltet/doppelt
+        if (last && Math.hypot(m.x - last.x, m.z - last.z) > SNAP_DIST) b.length = 0; // Respawn/Teleport: nicht durchs Gelände gleiten
+        b.push({ ts, x: m.x, y: m.y, z: m.z, yaw: m.yaw });
+        if (b.length > 30) b.shift();
+        r.pitch = m.p || 0; r.aim = !!m.aim; r.weapon = WEAPONS[m.w] ? m.w : 'rev'; r.mounted = !!m.m; r.hs = m.hs || 0; r.sp = m.sp || 0;
         if (r.alive && !m.a) r.deadT = 0;
         r.alive = !!m.a;
         break;
@@ -253,6 +274,9 @@
     });
     peer.on('disconnected', () => { if (!left) setTimeout(() => { if (!left && peer.disconnected && !peer.destroyed) peer.reconnect(); }, 2000); });
     peer.on('error', (e) => {
+      // Nach einer Störung hält der Server die alte Sitzung evtl. noch: Raum und Verbindungen behalten,
+      // 'disconnected' versucht es weiter. Nur beim Eröffnen einen anderen Code wählen.
+      if (e.type === 'unavailable-id' && active) return;
       if (e.type === 'unavailable-id' && retries++ < 3) { peer.destroy(); startHost(); return; }
       if (e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error') toast('Verbindung zum Vermittlungsserver gestört – versuche erneut…', 4000);
       else toast('Netzwerkfehler: ' + e.type, 4000);
@@ -264,11 +288,13 @@
     say(`Verbinde mit Vermittlungsserver…`);
     peer = new Peer(PEER_OPTS);
     const fail = (why) => { if (!active) leave(why); };
-    let attempt = 0;
+    let attempt = 0, answered = false;
     // Verbindungsaufbau zum Host; hängt ein Versuch (ICE/NAT), neu versuchen
     const tryConnect = () => {
       if (left || active) return;
-      if (attempt++ >= JOIN_ATTEMPTS) { fail(hasTurn ? `Keine Verbindung zu Raum ${room} möglich. Du spielst alleine.` : `Keine direkte Verbindung zu Raum ${room} möglich – euer Netzwerk braucht ein TURN-Relay (siehe js/turn-config.js). Du spielst alleine.`); return; }
+      // Hat der Host geantwortet, gibt es den Raum – dann scheitert es an NAT/Firewall, nicht am Raumcode
+      if (hostConn && hostConn.peerConnection && hostConn.peerConnection.remoteDescription) answered = true;
+      if (attempt++ >= JOIN_ATTEMPTS) { fail(!answered ? `Raum ${room} nicht gefunden – du spielst alleine` : hasTurn ? `Keine Verbindung zu Raum ${room} möglich. Du spielst alleine.` : `Keine direkte Verbindung zu Raum ${room} möglich – euer Netzwerk braucht ein TURN-Relay (siehe js/turn-config.js). Du spielst alleine.`); return; }
       if (hostConn) { const old = hostConn; hostConn = null; try { old.close(); } catch (e) { /* egal */ } }
       say(`Verbinde mit Raum ${room}… (Versuch ${attempt}/${JOIN_ATTEMPTS})`, JOIN_ATTEMPT_MS);
       const c = peer.connect(PREFIX + room, { reliable: true, serialization: 'json' });
@@ -281,10 +307,11 @@
     };
     joinTimer = setTimeout(() => fail('Vermittlungsserver nicht erreichbar. Du spielst alleine.'), 15000);
     peer.on('open', (id) => { myId = id; tryConnect(); });
-    let tries = 0;
+    let missing = 0;
     peer.on('error', (e) => {
-      // Raum evtl. noch nicht beim Vermittlungsserver registriert: ein paar Mal erneut versuchen
-      if (e.type === 'peer-unavailable' && !active && tries++ < 3) { status(`Suche Raum ${room}… (${tries})`); clearTimeout(joinTimer); attempt = Math.max(0, attempt - 1); setTimeout(tryConnect, 2000); return; }
+      // Raum evtl. noch nicht beim Vermittlungsserver registriert: einmal abwarten und erneut versuchen.
+      // Der Server meldet einen fehlenden Raum nur etwa alle 15 s; die zweite Meldung heißt: Raum gibt es nicht
+      if (e.type === 'peer-unavailable' && !active && ++missing < 2) { status(`Suche Raum ${room}…`); clearTimeout(joinTimer); attempt = Math.max(0, attempt - 1); setTimeout(tryConnect, 2000); return; }
       fail(e.type === 'peer-unavailable' ? `Raum ${room} nicht gefunden – du spielst alleine` : `Netzwerkfehler (${e.type}) – du spielst alleine`);
     });
     peer.on('disconnected', () => { if (!left && !active) setTimeout(() => { if (!left && peer.disconnected && !peer.destroyed) peer.reconnect(); }, 2000); });
@@ -301,7 +328,7 @@
   setInterval(() => {
     if (!active) return;
     const p = player, now = performance.now();
-    sendAll({ t: 's', id: myId, o: p.outfit | 0, x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), yaw: +p.yaw.toFixed(3), p: +p.camPitch.toFixed(3), a: p.alive, aim: p.aiming || p.faceT > 0 || p.deadEyeOn, w: p.weapon, m: p.mounted, hs: p.mounted && p.horse ? +p.horse.speed.toFixed(1) : 0, sp: p.mounted ? 0 : +Math.hypot(p.vx, p.vz).toFixed(1) });
+    sendAll({ t: 's', id: myId, ts: Math.round(now), o: p.outfit | 0, x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), yaw: +p.yaw.toFixed(3), p: +p.camPitch.toFixed(3), a: p.alive, aim: p.aiming || p.faceT > 0 || p.deadEyeOn, w: p.weapon, m: p.mounted, hs: p.mounted && p.horse ? +p.horse.speed.toFixed(1) : 0, sp: p.mounted ? 0 : +Math.hypot(p.vx, p.vz).toFixed(1) });
     if (isHost) {
       if ((worldTimer += 1 / SEND_HZ) > 4) { worldTimer = 0; sendAll({ t: 'w', h: gameHours, r: rainTarget }); }
       for (const [id, t] of lastSeen) if (now - t > TIMEOUT * 1000) { const c = conns.get(id); if (c) c.close(); dropClient(id); }
@@ -352,9 +379,9 @@
         </div></div><div class="mf">O / Esc = schließen</div>`;
     },
     tick(dt) {
-      const k = 1 - Math.exp(-dt * 14);
+      const now = performance.now();
       for (const r of remotes.values()) {
-        r.x += (r.tx - r.x) * k; r.y += (r.ty - r.y) * k; r.z += (r.tz - r.z) * k; r.yaw = lerpAngle(r.yaw, r.tyaw, k);
+        sampleRemote(r, now - r.off - INTERP_MS);
         const m = r.model, g = m.g;
         g.position.set(r.x, r.y, r.z); g.rotation.y = r.yaw;
         const rw = WEAPONS[r.weapon] || WEAPONS.rev;

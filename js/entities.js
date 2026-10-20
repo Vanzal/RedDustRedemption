@@ -50,8 +50,10 @@ function updateFX(dt) {
 }
 
 // ---------- Menschen-Modell (runde Formen, Gesicht, Hut, Holster) ----------
+// Ausgeblendete Figuren (siehe cullCharacters) sparen sich die Matrix-Updates aller Teile
+function updateIfVisible(force) { if (this.visible) THREE.Object3D.prototype.updateMatrixWorld.call(this, force); }
 function makeHumanoid(o) {
-  const g = new THREE.Group(); g.rotation.order = 'YXZ';
+  const g = new THREE.Group(); g.rotation.order = 'YXZ'; g.updateMatrixWorld = updateIfVisible;
   const skin = o.skin || 0xd9a877;
   const legs = [], arms = [];
   const legMat = lam(o.pants || 0x3a4a5a), bootMat = lam(0x2a1c14), shirt = lam(o.shirt || 0x8a4a3a), dark = lam(0x1a120c);
@@ -115,6 +117,7 @@ function makeHumanoid(o) {
     }
   }
   const hand = new THREE.Group(); hand.position.set(0, -0.6, 0.02); hand.rotation.x = Math.PI / 2; arms[1].add(hand);
+  for (const n of [g, ...legs, ...arms]) bakeParts(n);
   return { g, legs, arms, hand, held: undefined };
 }
 
@@ -150,6 +153,7 @@ function makeWeaponModel(key) {
     if (s.scope) addMesh(g, zc(0.024, 0.024, 0.34, 8), lam(0x111114), 0, 0.105, 0.1, false);
     if (s.lever) { const l = addMesh(g, new THREE.TorusGeometry(0.045, 0.008, 4, 8), metal, 0, -0.05, 0.05, false); l.rotation.y = Math.PI / 2; }
   }
+  bakeParts(g);
   return g;
 }
 function setHeldWeapon(m, key) {
@@ -163,7 +167,7 @@ function setHeldWeapon(m, key) {
 
 // ---------- Vierbeiner (Pferd, Hirsch, Kuh, Wolf) ----------
 function makeQuad(o) {
-  const g = new THREE.Group(); g.rotation.order = 'YXZ';
+  const g = new THREE.Group(); g.rotation.order = 'YXZ'; g.updateMatrixWorld = updateIfVisible;
   const body = lam(o.color), dark = lam(o.dark || 0x222222);
   const { bl, bw, bh, ll, lt = 0.16 } = o;
   const r0 = bh / 2;
@@ -208,6 +212,7 @@ function makeQuad(o) {
     addMesh(g, new THREE.BoxGeometry(0.1, 0.16, 0.1), lam(0x3a2418), 0, ll + bh + 0.18, 0.15, false);
     addMesh(g, new THREE.BoxGeometry(bw * 0.9, 0.05, 0.05), lam(0x3a2418), 0, ll + bh * 0.4, 0.15, false);
   }
+  for (const n of [g, ...legs]) bakeParts(n);
   return { g, legs };
 }
 function animateQuad(q, ph, amp) {
@@ -693,6 +698,26 @@ function updateEntities(dt, t) {
     const h = humans[i];
     if (h.dead && h.deadT > 90 + (h.looted ? -60 : 0)) { scene.remove(h.g); humans.splice(i, 1); }
   }
+}
+// Figuren außerhalb des Blickfelds oder jenseits der Sichtweite nicht rendern.
+// Nahe Figuren bleiben immer sichtbar, damit ihre Schatten ins Bild fallen können.
+const CULL_NEAR = 80, CULL_FAR = 260, _cullFrus = new THREE.Frustum(), _cullPV = new THREE.Matrix4(), _cullS = new THREE.Sphere(), _tanBase = Math.tan(32 * Math.PI / 180);
+function cullCharacters() {
+  camera.updateMatrixWorld();
+  _cullPV.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _cullFrus.setFromProjectionMatrix(_cullPV);
+  // beim Zielen/Zoomen (kleineres FOV) wirken ferne Figuren größer → Sichtweite mitskalieren
+  const far = CULL_FAR * Math.max(1, _tanBase / Math.tan(camera.fov * Math.PI / 360));
+  const cx = camera.position.x, cz = camera.position.z, far2 = far * far;
+  const cull = (g, r) => {
+    const dx = g.position.x - cx, dz = g.position.z - cz, d2 = dx * dx + dz * dz;
+    if (d2 < CULL_NEAR * CULL_NEAR) { g.visible = true; return; }
+    if (d2 > far2) { g.visible = false; return; }
+    _cullS.center.set(g.position.x, g.position.y + 1, g.position.z); _cullS.radius = r;
+    g.visible = _cullFrus.intersectsSphere(_cullS);
+  };
+  for (const h of humans) cull(h.g, 2.4);
+  for (const a of animals) cull(a.g, 2.6);
+  if (playerHorse) cull(playerHorse.g, 3);
 }
 // Schuss- / Lärm-Alarm
 function alarm(x, z, r) {
